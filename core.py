@@ -33,8 +33,12 @@ class Child(object):
         self.name = name
         self.parent = parent
         self.connection = connection
-        if parent is not None:
+        if isinstance(parent, Compiler):
+            self.is_master_pseudoclock = True
+            self.compiler = parent
+        else:
             self.parent.add_child(self)
+            self.compiler = parent.compiler
 
     def __str__(self):
         return _formatobj(self, name=self.name,
@@ -46,12 +50,8 @@ class Child(object):
 class Device(Child):
 
     def __init__(self, name, parent, connection):
-        self.name = name
-        self.parent = parent
-        self.connection = connection
+        super().__init__(name, parent, connection)
         self.children = []
-        if parent is not None:
-            self.parent.add_child(self)
 
     def add_child(self, child):
         self.children.append(child)
@@ -108,11 +108,13 @@ class Output(Device):
 
 
 class Instruction(Device):
-    pass
+    def __init__(self):
+        pass
 
 
 class Ramp(Instruction):
     def __init__(self, t, duration, function, samplerate, parent, _traceback_depth=-1):
+        super().__init__()
         self.t = t
         self.function = function
         self.parent = parent
@@ -137,6 +139,7 @@ class Ramp(Instruction):
 
     def compute_timing(self, wait):
         """Called by the compiler during processing."""
+        pass
 
     def __str__(self):
         return _formatobj(self, t=self.t, duration=self.duration, function=self.function,
@@ -180,7 +183,8 @@ if __name__ == '__main__':
 
     import numpy as np
 
-    pseudoclock = Pseudoclock('pseudoclock', None, None)
+    compiler = Compiler()
+    pseudoclock = Pseudoclock('pseudoclock', compiler, None)
     ni_card = ClockedDevice('ni_card', pseudoclock, 'flag 1')
     ao = Output('ao', ni_card, 'ao0')
 
