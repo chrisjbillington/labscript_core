@@ -16,12 +16,15 @@ def _formatobj(obj, *args, **kwargs):
     return result
 
 
-class Compiler(object):
+class Shot(object):
     def __init__(self):
         self.children = []
 
     def add_child(self, child):
         self.children.append(child)
+
+    def wait(self, t):
+        self.wait_times.append(t)
 
     def compile(self):
         for pseudoclock in self.children:
@@ -33,11 +36,10 @@ class Child(object):
         self.name = name
         self.parent = parent
         self.connection = connection
-        if isinstance(parent, Compiler):
-            self.is_master_pseudoclock = True
+        self.parent.add_child(self)
+        if isinstance(parent, Shot):
             self.compiler = parent
         else:
-            self.parent.add_child(self)
             self.compiler = parent.compiler
 
     def __str__(self):
@@ -107,24 +109,32 @@ class Output(Device):
         return self.children
 
 
-class Instruction(Device):
-    def __init__(self):
-        pass
+class Instruction(Child):
+    def __init__(self, _traceback_depth=-1):
+        # For giving the user a traceback if an error regarding this
+        # instruction is found during later processing:
+        self.traceback = ''.join(traceback.format_stack()[:_traceback_depth])
+
+
+class Wait(Instruction):
+    def __init__(self, t, name):
+        super().__init__()
+        self.t = t
+        self.name = name
+
+    def __str__(self):
+        return _formatobj(self, t=self.t, name=f"'{self.name}'")
 
 
 class Ramp(Instruction):
-    def __init__(self, t, duration, function, samplerate, parent, _traceback_depth=-1):
-        super().__init__()
+    def __init__(self, t, duration, function, samplerate, parent, _traceback_depth=-2):
+        super().__init__(_traceback_depth=_traceback_depth)
         self.t = t
         self.function = function
         self.parent = parent
         self.duration = duration
         self.samplerate = samplerate
         self.parent.add_child(self)
-
-        # For giving the user a traceback if an error regarding this
-        # instruction is found during later processing:
-        self.traceback = ''.join(traceback.format_stack()[:_traceback_depth])
 
         # Timing details be computed during processing:
         self.relative_t = None
@@ -151,7 +161,7 @@ class Constant(Ramp):
     def __init__(self, t, value, parent):
         self.value = value
         super().__init__(t, duration=0, function=_constantfunc(value),
-                         samplerate=0, parent=parent, _traceback_depth=-2)
+                         samplerate=0, parent=parent, _traceback_depth=-3)
 
     def __str__(self):
         return _formatobj(self, t=self.t, value=self.value, parent=f"'{self.parent.name}'")
@@ -183,12 +193,12 @@ if __name__ == '__main__':
 
     import numpy as np
 
-    compiler = Compiler()
-    pseudoclock = Pseudoclock('pseudoclock', compiler, None)
+    shot = Shot()
+    pseudoclock = Pseudoclock('pseudoclock', shot, None)
     ni_card = ClockedDevice('ni_card', pseudoclock, 'flag 1')
     ao = Output('ao', ni_card, 'ao0')
 
     instruction1 = Ramp(t=0, function=np.sin, parent=ao, duration=10, samplerate=20)
     instruction2 = Constant(t=4.25, value=7, parent=ao)
 
-    do_magic(pseudoclock)
+    shot.compile()
