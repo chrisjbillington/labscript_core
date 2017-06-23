@@ -31,213 +31,21 @@ def _const(c):
     return const
 
 
-def _formatobj(obj, *args, **kwargs):
+def _formatobj(obj, *attrs):
     """Format an object and some arguments for printing"""
     result = obj.__class__.__name__ + "("
-    for arg in args:
-        result += f"{arg, }"
-    for kwarg, value in kwargs.items():
-        if isinstance(value, Child) or isinstance(value, Shot):
+    for attr in attrs:
+        value = getattr(obj, attr)
+        if isinstance(value, Device) or isinstance(value, Shot):
             value = value.name
-        result += f"{kwarg}={value}, "
+        result += f"{attr}={value}, "
     result = result[:-2] + ')'
     return result
 
 
-class Shot(object):
-    """Top level object for the compilation"""
-    def __init__(self, epsilon):
-        self.epsilon = epsilon
-        self.child_devices = []
-        self.instructions = []
-        self.name = '<shot>'
-        self.total_instructions = 0
-        self.master_pseudoclock = None
-
-    def _add_child_device(self, child_device):
-        self.children.append(child_device)
-        if isinstance(child_device, PseudoclockDevice):
-            if self.master_pseudoclock is not None:
-                raise ValueError(f"Already have a master pseudoclock: {self.master_pseudoclock}. "
-                                 "Cannot set two pseudoclock devices as child devices of the shot")
-            self.master_pseudoclock = child_device
-
-    def _add_instruction(self, instruction):
-        self.waits.append(instruction)
-
-    def _get_child_devices(self):
-        """Return all children recursively from child devices connected to
-        this device"""
-        child_devices = self.child_devices.copy()
-        for child_device in self.child_devices:
-            child_devices.extend(child_device.get_child_devices())
-        return instructions
-
-    def start(self):
-        #TODO: tell all devices to inherit everything:
-        return self.wait(0)
-
-    def wait(self):
-        # TODO: triggers:
-        Wait(self, t)
-
-
-    def compile(self):
-        # First we ensure our wait instructions are ordered by time:
-        _sort_by_time(self.waits)
-        
-        for pseudoclock in self.children:
-            self.compile_pseudoclock(pseudoclock, waits)
-
-    def _compile_pseudoclock(self, pseudoclock, waits):
-        # Get all instructions on this pseudoclock:
-        instructions = pseudoclock.get_instructions()
-
-        # Process waits. 
-        # Compute the time of each instruction relative to the start of its
-        # pseudoclock:
-        for inst in instructions:
-            print(inst)
-
-
-class Child(object):
-    """A parent class for both devices and instructions"""
-    def __init__(self, name, parent_device):
-        self.name = name
-        self.parent_device = parent_device
-        self.parent_device.add_child_device(self)
-
-        if isinstance(self.parent_device, Shot):
-            self.shot = parent_device
-            self.t0 = 0
-            self.wait_prep_duration = self.minimum_wait_duration
-        else:
-            self.shot = parent.shot
-            self.t0 = parent.t0 + parent.trigger_delay(self)
-            self.wait_prep_duration = self.minimum_wait_duration + shot.epsilon - self.t0
-
-        if isinstance(self, Pseudoclock):
-            self.pseudoclock = self
-        else:
-            self.pseudoclock = parent.pseudoclock
-
-    def __str__(self):
-        return _formatobj(self, name=self.name, parent=self.parent)
-
-    __repr__ = __str__
-
-
-class Device(Child):
-
-    def __init__(self, name, parent, connection):
-        super().__init__(name, parent)
-        self.connection = connection
-        self.children = []
-
-    def _add_child(self, child):
-        self.children.append(child)
-
-    def get_instructions(self):
-        """Return all instructions recursively from child devices connected to
-        this device"""
-        instructions = []
-        for child in self.children:
-            instructions.extend(child.get_instructions())
-        return instructions
-
-    def get_children(self):
-        """Return all children recursively from child devices connected to
-        this device"""
-        children = self.children.copy()
-        for child in self.children:
-            children.extend(child.children())
-        return instructions
-
-    def trigger_delay(self, child):
-        """The time elapsed between receiving a trigger/clock tick and
-        providing output to a given child device or Instruction"""
-        if self.parent is self.shot:
-            # Master pseudoclock has no trigger delay.
-            return 0
-        raise NotImplementedError("Subclasses must implement trigger_delay() to specify "
-                                  "the delay between input and output to a specific child")
-
-    def __str__(self):
-        return _formatobj(self, name=self.name, parent=self.parent,
-                          connection=self.connection)
-
-
-class TriggerableDevice(Device):
-    def __init__(self, name, parent, connection, minimum_trigger_duration):
-        super().__init__(name, parent, connection)
-        # The minimum high/low time of a pulse sufficient to trigger the
-        # device
-        self.minimum_trigger_duration = minimum_trigger_duration
-
-
-class PseudoclockDevice(TriggerableDevice):
-    def __init__(self, name, parent, connection, minimum_trigger_duration):
-        super().__init__(name, parent, connection, minimum_trigger_duration)
-
-        
-    
-class Pseudoclock(Device):
-    def __init__(self, name, parent, connection, minimum_period,
-                 minimum_wait_duration, timebase):
-        super().__init__(name, parent, connection)
-        # The shortest clock period this device is capable of producing
-        self.minimum_period = minimum_period
-           
-        # The delay, upon executing a wait instruction, before the
-        # pseudoclock will be responsive to a received trigger:
-        self.minimum_wait_duration = minimum_wait_duration
-
-        # Time resolution with which one can specify the period of a clock
-        # tick
-        self.timebase = timebase
-
-
-class ClockedDevice(Device):
-    def __init__(self, name, parent, connection, minimum_trigger_duration, minimum_period):
-        super().__init__(name, parent, connection)
-        # The minimum high/low time of a pulse sufficient to trigger the
-        # device
-        self.minimum_trigger_duration = minimum_trigger_duration
-
-        # The shortest interval between outputs this device is capable of
-        # producing, also equal to the shortest interval between clock ticks
-        # it can receive
-        self.minimum_period = minimum_period
-
-
-class Output(Device):
-    def __init__(self, name, parent, connection):
-        super().__init__(name, parent, connection)
-        self.instructions = []
-
-    def _add_child(self, child):
-        if isinstance(child, Instruction):
-            self.instructions.append(child)
-        else:
-            self.children.append(child)
-
-    def get_instructions(self):
-        """Return all instructions of this output"""
-        return self.instructions
-
-    def function(self, t, duration, function, samplerate):
-        Function(self, t, duration, function, samplerate)
-        return duration
-
-    def constant(self, t, value):
-        Constant(self, t, value)
-        return 0
-
-
-class Instruction(Child):
-
-    def __init__(self, parent, t):
-        super().__init__(None, parent)
+class Instruction(object):
+    def __init__(self, parent, t, *args, **kwargs):
+        super().__init__(parent, t, *args, **kwargs)
         self.t = t
 
         # Timing details to be computed during processing:
@@ -249,8 +57,8 @@ class Instruction(Child):
         self.traceback = self._get_traceback()
 
         # Count how many instructions there are and save which number we are:
-        self.instruction_number = self.shot.total_instructions
-        self.shot.total_instructions += 1
+        self.instruction_number = self.parent.shot.total_instructions
+        self.parent.shot.total_instructions += 1
 
     def _convert_times(self, waits):
         """Convert all times specified by this instruction to ones relative to
@@ -260,8 +68,7 @@ class Instruction(Child):
         self.relative_t and self.quantised_t. Subclasses implementing this
         method should call our implementation, then convert any additional
         times that they specify to their relative and quantised versions."""
-        import IPython
-        IPython.embed()
+        pass
 
     def _get_traceback(self):
         """Get a traceback for the line of user code that created an
@@ -279,21 +86,27 @@ class Instruction(Child):
         return ''.join(full_traceback_lines[:-depth])
 
     def __str__(self):
-        return _formatobj(self, parent=self.parent, t=self.t)
+        return _formatobj(self, 'parent', 't')
 
 
 class Wait(Instruction):
-    def __init__(self, parent, t, name):
-        super().__init__(parent, t)
+    def __init__(self, parent, t, name, *args, **kwargs):
+        super().__init__(parent, t, *args, **kwargs)
         self.name = name
 
     def __str__(self):
-        return _formatobj(self, parent=self.parent, t=self.t, name=self.name)
+        return _formatobj(self, 'parent', 't', 'name')
 
 
-class Function(Instruction):
-    def __init__(self, parent, t, duration, function, samplerate):
-        super().__init__(parent, t)
+class OutputInstruction(Instruction):
+    """A class to distinguish non-wait instructions from wait instructions"""
+    pass
+
+
+class Function(OutputInstruction):
+    """An instruction representing a function ramp"""
+    def __init__(self, parent, t, duration, function, samplerate, *args, **kwargs):
+        super().__init__(parent, t, *args, **kwargs)
         self.function = function
         self.parent = parent
         self.duration = duration
@@ -312,34 +125,254 @@ class Function(Instruction):
         pass
 
     def __str__(self):
-        return _formatobj(self, parent=self.parent, t=self.t, duration=self.duration,
-                          function=self.function, samplerate=self.samplerate)
+        return _formatobj(self, 'parent', 't', 'duration', 'function', 'samplerate')
 
 
-class Constant(Function):
-    def __init__(self, parent, t, value):
-        super().__init__(parent, t, 0, _const(value), 0)
+class Constant(OutputInstruction):
+    """An instruction for setting an output value at a specific time"""
+    def __init__(self, parent, t, value, *args, **kwargs):
+        # A constant instruction is just a function instruction with no
+        # duration and a zero sample rate:
+        super().__init__(parent, t, 0, _const(value), 0, *args, **kwargs)
         self.value = value
 
     def __str__(self):
-        return _formatobj(self, parent=self.parent, t=self.t, value=self.value)
+        return _formatobj(self, 'parent', 't', 'value')
+
+
+class HasInstructions(object):
+    """Mixin for objects that have instructions, currently: Shot (which can
+    have wait instructions) and Output (which can have all other
+    instructions). Note that when inheriting both HasInstructions and
+    HasDevices, inheriting HasInstructions first means that the
+    all_instructions property will not recurse into child devices."""
+    allowed_instructions = [Instruction]
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.instructions = []
+
+    def add_instruction(self, instruction):
+        if not any(isinstance(instruction, cls) for cls in self.allowed_instructions):
+            raise TypeError(f"Instruction of type {device.__class__.__name__} not permitted " 
+                            "by this instance.")
+        self.instructions.append(instruction)
+
+    @property
+    def all_instructions(self):
+        """Return our instructions. Do not recurse into child devices, in the
+        case that we inherit from HasDevices as well"""
+        return self.instructions
+
+    def __repr__(self):
+        return self.__str__()
+
+
+class HasDevices(object):
+    """Mixin for objects that have child devices, currently: Shot and
+    Device."""
+    # Will be interpreted as allowed_devices = [Device], but the name Device
+    # is not available yet. Subclasses should override this class attribute to
+    # specify which devices are allowed as children:
+    allowed_devices = None
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.allowed_devices is None:
+            self.allowed_devices = [Device]
+        self.devices = []
+
+    def add_device(self, device):
+        if not any(isinstance(device, cls) for cls in self.allowed_devices):
+            raise TypeError(f"Device of type {device.__class__.__name__} not permitted " 
+                            "by this instance.")
+        self.devices.append(child_device)
+
+    @property
+    def all_devices(self):
+        """Recursively return all devices."""
+        devices = self.devices.copy()
+        for device in self.devices:
+            devices.extend(device.all_devices)
+
+    @property
+    def all_instructions(self):
+        """Recursively return instructions from all devices. Note that devices
+        inheriting from HasInstructions before HasDevices will return only
+        their instructions and not recurse into their own child devices. """
+        instructions = []
+        for device in self.devices:
+            instructions.extend(device.all_instructions)
+        return instructions
+
+    def __repr__(self):
+        return self.__str__()
+
+
+class Device(HasDevices):
+    # Will be interpreted as allowed_devices = [Device], but the name Device
+    # is not available during class construction. Subclasses should override
+    # this class attribute to specify which devices are allowed as children:
+    allowed_devices = None
+    def __init__(self, name, parent, connection, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.name = name
+        self.parent = parent
+        self.connection = connection
+
+    def delay(self, child):
+        """The time elapsed between receiving a trigger/clock tick and
+        providing output to a given child device or Instruction. Should be 
+        zero for top level devices."""
+        raise NotImplementedError("Subclasses must implement delay()")
+
+    def __str__(self):
+        return _formatobj(self, 'name', 'parent', 'connection')
+
+
+class Output(HasInstructions, Device):
+    allowed_instructions = [OutputInstruction]
+    allowed_devices = [Device]
+    def __init__(self, name, parent, connectionn, *args, **kwargs):
+        super().__init__(self.allowed_instructions, name, parent, connection, *args, **kwargs)  
+          
+    def function(self, t, duration, function, samplerate):
+        Function(self, t, duration, function, samplerate)
+        return duration
+
+    def constant(self, t, value):
+        Constant(self, t, value)
+        return 0
+
+
+class TriggerableDevice(Device):
+    def __init__(self, name, parent, connection,
+                 minimum_trigger_duration, *args, **kwargs):
+        super().__init__(name, parent, connection, *args, **kwargs)
+
+        # The minimum high/low time of a pulse sufficient to trigger the
+        # device
+        self.minimum_trigger_duration = minimum_trigger_duration
+
+
+class Trigger(Output):
+    allowed_devices = [TriggerableDevice]
+
+
+class ClockableDevice(Device):
+    def __init__(self, name, parent, connection, minimum_trigger_duration, minimum_period,
+                 *args, **kwargs):
+        super().__init__(name, parent, connection, *args, **kwargs)
+        # The minimum high/low time of a pulse sufficient to trigger the
+        # device
+        self.minimum_trigger_duration = minimum_trigger_duration
+
+        # The shortest interval between outputs this device is capable of
+        # producing, also equal to the shortest interval between clock ticks
+        # it can receive
+        self.minimum_period = minimum_period
+
+
+class ClockLine(Device):
+    allowed_devices = [ClockableDevice]
+
+
+class Pseudoclock(Device):
+    allowed_devices = [ClockLine]
+    def __init__(self, name, parent, connection, minimum_period, 
+                 minimum_wait_duration, timebase, *args, **kwargs):
+        super().__init__(name, parent, connection, *args, **kwargs)
+        # The shortest clock period this device is capable of producing
+        self.minimum_period = minimum_period
+           
+        # The delay, upon executing a wait instruction, before the
+        # pseudoclock will be responsive to a received trigger:
+        self.minimum_wait_duration = minimum_wait_duration
+
+        # Time resolution with which one can specify the period of a clock
+        # tick
+        self.timebase = timebase
+
+
+class PseudoclockDevice(TriggerableDevice):
+    allowed_devices = [Pseudoclock]
+    def __init__(self, name, parent, connection, *args, **kwargs):
+        super().__init__(name, parent, connection, *args, **kwargs)
+        # The time that this device will be triggered by its parent.
+        # "None" means as early as possible:
+        self.initial_trigger_time = None 
+
+    def set_initial_trigger_time(self, initial_trigger_time):
+        self.initial_trigger_time = initial_trigger_time
+
+
+class Shot(HasDevices, HasInstructions):
+    """Top level object for the compilation"""
+    allowed_instructions=[Wait]
+
+    def __init__(self, name, epsilon, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.epsilon = epsilon
+        self.name = name
+
+    def start(self):
+        # TODO up: add_device, min clock periods
+        # down: delays
+        # triggers
+        pass
+
+    def wait(self, t, name):
+        Wait(self, t, name)
+        # TODO: triggers
+
+    def compile(self):
+
+        _sort_by_time(self.waits)
+        
+        # TODO: Quantise and relativise times 
+        # TODO Error check up. First on all instructions, then on parent devices upward one
+        # layer at a time
+
+        
+        for pseudoclock in self.children:
+            self.compile_pseudoclock(pseudoclock, waits)
+
+    def _compile_pseudoclock(self, pseudoclock, waits):
+        # Get all instructions on this pseudoclock:
+        instructions = pseudoclock.get_instructions()
+
+        # Process waits. 
+        # Compute the time of each instruction relative to the start of its
+        # pseudoclock:
+        for inst in instructions:
+            print(inst)
+
+
+    # TODO: all this inheritance business:
+    # if isinstance(self.parent_device, Shot):
+    #     self.shot = parent_device
+    #     self.t0 = 0
+    #     self.wait_prep_duration = self.minimum_wait_duration
+    # else:
+    #     self.shot = parent.shot
+    #     self.t0 = parent.t0 + parent.trigger_delay(self)
+    #     self.wait_prep_duration = self.minimum_wait_duration + shot.epsilon - self.t0
+
+    # if isinstance(self, Pseudoclock):
+    #     self.pseudoclock = self
+    # else:
+    #     self.pseudoclock = parent.pseudoclock
+
+
+    def __str__(self):
+        return _formatobj(self, 'name')
 
 
 
+shot = Shot('<shot>', 100e-9)
+pulseblaster = PseudoclockDevice('pulseblaster', shot, None, minimum_trigger_duration=0.1)
+pulseblaster_clock = Pseudoclock('pulseblaster_clock', pulseblaster, 'clock',
+                                 minimum_period=1, minimum_wait_duration=0.5, timebase=0.1)
+clockline = ClockLine('clockline', pulseblaster_clock, 'flag 1')
+# pseudoclock = Pseudoclock('pseudoclock', shot, None, minimum_period=1,
+                           # minimum_wait_duration=0.5, timebase=0.1)
 
-if __name__ == '__main__':
-
-    import numpy as np
-
-    shot = Shot(1)
-    pseudoclock = Pseudoclock('pseudoclock', shot, None)
-    ni_card = ClockedDevice('ni_card', pseudoclock, 'flag 1')
-    ao = Output('ao', ni_card, 'ao0')
-
-    ao.function(t=0, duration=10, function=np.sin, samplerate=20)
-    ao.constant(t=4.25, value=7)
-
-    print(ao.get_instructions()[0].traceback)
-
-
-    shot.compile()
+# ni_card = Clocl
