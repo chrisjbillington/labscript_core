@@ -128,7 +128,7 @@ class Function(OutputInstruction):
         return _formatobj(self, 'parent', 't', 'duration', 'function', 'samplerate')
 
 
-class Constant(OutputInstruction):
+class Constant(Function):
     """An instruction for setting an output value at a specific time"""
     def __init__(self, parent, t, value, *args, **kwargs):
         # A constant instruction is just a function instruction with no
