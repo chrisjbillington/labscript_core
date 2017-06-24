@@ -44,9 +44,23 @@ def _formatobj(obj, *attrs):
 
 
 class Instruction(object):
-    def __init__(self, parent, t, *args, **kwargs):
-        super().__init__(parent, t, *args, **kwargs)
+    def __init__(self, parent, t, *args, _inst_depth=1, **kwargs):
+        """Base instruction class. Has an initial time, and that's about it.
+        __inst_depth is the stack depth of functions that are wrappers around
+        instantiating Instructions. All such functions (including the __init__
+        method of subclasses of Instruction) should accept an _inst_depth=1
+        keyword argument, and should pass inst_depth=_inst_depth+1 to the
+        function they are wrapping (or the __init__ method of the Instruction
+        class they are subclassing), in order for the traceback-making code to
+        figure out where in the stack user code ends and labscript code
+        begins. This is so that we can raise tracebacks that end at the line
+        of user code that resulted in creating the instruction (internal
+        labscript tracebacks, unless labscript itself has crashed, are not
+        useful)."""
+        super().__init__(*args, **kwargs)
+        self.parent = parent
         self.t = t
+        self.parent.add_instruction(self)
 
         # Timing details to be computed during processing:
         self.relative_t = None
@@ -54,7 +68,7 @@ class Instruction(object):
 
         # For giving the user a traceback if an error regarding this
         # instruction is found during later processing:
-        self.traceback = self._get_traceback()
+        self._traceback = ''.join(traceback.format_stack()[:-_inst_depth])
 
         # Count how many instructions there are and save which number we are:
         self.instruction_number = self.parent.shot.total_instructions
@@ -70,28 +84,24 @@ class Instruction(object):
         times that they specify to their relative and quantised versions."""
         pass
 
-    def _get_traceback(self):
-        """Get a traceback for the line of user code that created an
-        instruction. Only meant to be called from the __init__ method of
-        Instruction."""
-        full_traceback_lines = traceback.format_stack()
-        # how deep into the call stack are we from the function that the user
-        # called to make this instruction?
-        depth = 0
-        for frame in inspect.getouterframes(inspect.currentframe()):
-            depth += 1
-            print(frame.frame.f_code)
-            if frame.frame.f_code not in cls.instruction_code_objects:
-                break
-        return ''.join(full_traceback_lines[:-depth])
+    @property
+    def traceback(self):
+        """A traceback showing the origin of this instruction in user code"""
+        # Implemented as a property because str(self) may not work at
+        # instantiation time since not all printed instance attributes of the
+        # subclass may have been set yet
+        return self._traceback + str(self)
 
     def __str__(self):
         return _formatobj(self, 'parent', 't')
 
+    def __repr__(self):
+        return self.__str__()
+
 
 class Wait(Instruction):
-    def __init__(self, parent, t, name, *args, **kwargs):
-        super().__init__(parent, t, *args, **kwargs)
+    def __init__(self, parent, t, name, *args, _inst_depth=1, **kwargs):
+        super().__init__(parent, t, *args, _inst_depth=_inst_depth+1, **kwargs)
         self.name = name
 
     def __str__(self):
@@ -105,8 +115,9 @@ class OutputInstruction(Instruction):
 
 class Function(OutputInstruction):
     """An instruction representing a function ramp"""
-    def __init__(self, parent, t, duration, function, samplerate, *args, **kwargs):
-        super().__init__(parent, t, *args, **kwargs)
+    def __init__(self, parent, t, duration, function, samplerate,
+                 *args, _inst_depth=1, **kwargs):
+        super().__init__(parent, t, *args, _inst_depth=_inst_depth+1, **kwargs)
         self.function = function
         self.parent = parent
         self.duration = duration
@@ -130,10 +141,11 @@ class Function(OutputInstruction):
 
 class Constant(Function):
     """An instruction for setting an output value at a specific time"""
-    def __init__(self, parent, t, value, *args, **kwargs):
+    def __init__(self, parent, t, value, *args, _inst_depth=1, **kwargs):
         # A constant instruction is just a function instruction with no
         # duration and a zero sample rate:
-        super().__init__(parent, t, 0, _const(value), 0, *args, **kwargs)
+        super().__init__(parent, t, 0, _const(value), 0,
+                         *args, _inst_depth=_inst_depth+1, **kwargs)
         self.value = value
 
     def __str__(self):
@@ -156,12 +168,6 @@ class HasInstructions(object):
             raise TypeError(f"Instruction of type {device.__class__.__name__} not permitted " 
                             "by this instance.")
         self.instructions.append(instruction)
-
-    @property
-    def all_instructions(self):
-        """Return our instructions. Do not recurse into child devices, in the
-        case that we inherit from HasDevices as well"""
-        return self.instructions
 
     def __repr__(self):
         return self.__str__()
@@ -186,22 +192,36 @@ class HasDevices(object):
                             "by this instance.")
         self.devices.append(child_device)
 
-    @property
-    def all_devices(self):
-        """Recursively return all devices."""
-        devices = self.devices.copy()
+    def descendant_devices(self, recurse_into_pseudoclocks=False):
+        """Recursively return devices that are descendants of this instance
+        (not including this instance itself). If recurse_into_pseudoclocks is
+        True, then pseudoclocks that are descendants of this instance, and all
+        of their descendants (including further pseudoclocks and so on) will
+        be returned as well, otherwise they will be excluded."""
+        devices = []
         for device in self.devices:
-            devices.extend(device.all_devices)
+            if isinstance(device, Pseudoclock) or not recurse_into_pseudoclocks:
+                continue
+            else:
+                devices.append(device)
+                devices.extend(device.descendant_devices(recurse_into_pseudoclocks))
 
-    @property
-    def all_instructions(self):
-        """Recursively return instructions from all devices. Note that devices
-        inheriting from HasInstructions before HasDevices will return only
-        their instructions and not recurse into their own child devices. """
-        instructions = []
+    def descendant_instructions(self, recurse_into_pseudoclocks=False):
+        """Recursively return instructions of all devices that are descendants
+        of this instance, including its own instructions (if any). If
+        recurse_into_pseudoclocks is True, then instructions of pseudoclocks
+        that are descendants of this instance, and all of their descendants
+        (including further pseudoclocks and so one) will be returned as well,
+        otherwise they will be excluded."""
+        if isinstance(self, HasInstructions):
+            instructions = self.instructions.copy()
+        else:
+            instructions = []
         for device in self.devices:
-            instructions.extend(device.all_instructions)
-        return instructions
+            if isinstance(device, Pseudoclock) or not recurse_into_pseudoclocks:
+                continue
+            else:
+                instructions.extend(device.descendant_instructions(recurse_into_pseudoclocks))
 
     def __repr__(self):
         return self.__str__()
@@ -217,6 +237,8 @@ class Device(HasDevices):
         self.name = name
         self.parent = parent
         self.connection = connection
+        self.shot = self.parent.shot
+        self.pseudoclock = self.parent.pseudoclock
 
     def delay(self, child):
         """The time elapsed between receiving a trigger/clock tick and
@@ -231,15 +253,15 @@ class Device(HasDevices):
 class Output(HasInstructions, Device):
     allowed_instructions = [OutputInstruction]
     allowed_devices = [Device]
-    def __init__(self, name, parent, connectionn, *args, **kwargs):
-        super().__init__(self.allowed_instructions, name, parent, connection, *args, **kwargs)  
+    def __init__(self, name, parent, connection, *args, **kwargs):
+        super().__init__(name, parent, connection, *args, **kwargs)  
           
-    def function(self, t, duration, function, samplerate):
-        Function(self, t, duration, function, samplerate)
+    def function(self, t, duration, function, samplerate, _inst_depth=1):
+        Function(self, t, duration, function, samplerate, _inst_depth=_inst_depth+1)
         return duration
 
-    def constant(self, t, value):
-        Constant(self, t, value)
+    def constant(self, t, value, _inst_depth=1):
+        Constant(self, t, value, _inst_depth=_inst_depth+1)
         return 0
 
 
@@ -291,6 +313,8 @@ class Pseudoclock(Device):
         # tick
         self.timebase = timebase
 
+        self.pseudoclock = self
+
 
 class PseudoclockDevice(TriggerableDevice):
     allowed_devices = [Pseudoclock]
@@ -312,6 +336,9 @@ class Shot(HasDevices, HasInstructions):
         super().__init__(*args, **kwargs)
         self.epsilon = epsilon
         self.name = name
+        self.shot = self
+        self.pseudoclock = None
+        self.total_instructions = 0
 
     def start(self):
         # TODO up: add_device, min clock periods
@@ -367,12 +394,13 @@ class Shot(HasDevices, HasInstructions):
 
 
 
-shot = Shot('<shot>', 100e-9)
-pulseblaster = PseudoclockDevice('pulseblaster', shot, None, minimum_trigger_duration=0.1)
-pulseblaster_clock = Pseudoclock('pulseblaster_clock', pulseblaster, 'clock',
-                                 minimum_period=1, minimum_wait_duration=0.5, timebase=0.1)
-clockline = ClockLine('clockline', pulseblaster_clock, 'flag 1')
-# pseudoclock = Pseudoclock('pseudoclock', shot, None, minimum_period=1,
-                           # minimum_wait_duration=0.5, timebase=0.1)
-
-# ni_card = Clocl
+if __name__ == '__main__':
+    shot = Shot('<shot>', 100e-9)
+    pulseblaster = PseudoclockDevice('pulseblaster', shot, None, minimum_trigger_duration=0.1)
+    pulseblaster_clock = Pseudoclock('pulseblaster_clock', pulseblaster, 'clock',
+                                     minimum_period=1, minimum_wait_duration=0.5, timebase=0.1)
+    clockline = ClockLine('clockline', pulseblaster_clock, 'flag 1')
+    ni_card = ClockableDevice('ni_card', clockline, 'clock', minimum_trigger_duration=0.1, minimum_period=1.2)
+    ao = Output('ao', ni_card, 'ao0')
+    ao.constant(t=0, value=7)
+    ao.function(t=0, duration=7, function=np.sin, samplerate=20)
