@@ -61,6 +61,8 @@ class Instruction(object):
         self.parent = parent
         self.t = t
         self.parent.add_instruction(self)
+        self.shot = parent.shot
+        self.pseudoclock = parent.pseudoclock
 
         # Timing details to be computed during processing:
         self.relative_t = None
@@ -68,7 +70,7 @@ class Instruction(object):
 
         # For giving the user a traceback if an error regarding this
         # instruction is found during later processing:
-        self._traceback = ''.join(traceback.format_stack()[:-_inst_depth])
+        self.traceback = ''.join(traceback.format_stack()[:-_inst_depth])
 
         # Count how many instructions there are and save which number we are:
         self.instruction_number = self.parent.shot.total_instructions
@@ -83,14 +85,6 @@ class Instruction(object):
         method should call our implementation, then convert any additional
         times that they specify to their relative and quantised versions."""
         pass
-
-    @property
-    def traceback(self):
-        """A traceback showing the origin of this instruction in user code"""
-        # Implemented as a property because str(self) may not work at
-        # instantiation time since not all printed instance attributes of the
-        # subclass may have been set yet
-        return self._traceback + str(self)
 
     def __str__(self):
         return _formatobj(self, 'parent', 't')
@@ -125,7 +119,7 @@ class Function(OutputInstruction):
 
         # Timing details to be computed during processing:
         self.quantised_duration = None
-        self.quantised_samplerate = None
+        self.quantised_sample_period = None
 
         # Results to be computed during processing:
         self.evaluation_timepoints = None
@@ -166,7 +160,7 @@ class HasInstructions(object):
     def add_instruction(self, instruction):
         if not any(isinstance(instruction, cls) for cls in self.allowed_instructions):
             raise TypeError(f"Instruction of type {device.__class__.__name__} not permitted " 
-                            "by this instance.")
+                            f"by {self}.")
         self.instructions.append(instruction)
 
     def __repr__(self):
@@ -189,8 +183,8 @@ class HasDevices(object):
     def add_device(self, device):
         if not any(isinstance(device, cls) for cls in self.allowed_devices):
             raise TypeError(f"Device of type {device.__class__.__name__} not permitted " 
-                            "by this instance.")
-        self.devices.append(child_device)
+                            f"as child of {self}.")
+        self.devices.append(device)
 
     def descendant_devices(self, recurse_into_pseudoclocks=False):
         """Recursively return devices that are descendants of this instance
@@ -232,22 +226,32 @@ class Device(HasDevices):
     # is not available during class construction. Subclasses should override
     # this class attribute to specify which devices are allowed as children:
     allowed_devices = None
+    delay = 0
     def __init__(self, name, parent, connection, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.name = name
         self.parent = parent
         self.connection = connection
+        self.parent.add_device(self)
         self.shot = self.parent.shot
         self.pseudoclock = self.parent.pseudoclock
 
-    def delay(self, child):
+    def get_delay(self, child):
         """The time elapsed between receiving a trigger/clock tick and
-        providing output to a given child device or Instruction. Should be 
-        zero for top level devices."""
-        raise NotImplementedError("Subclasses must implement delay()")
+        providing output to a given child device or Instruction. Should be
+        zero for top level devices. Subclasses should either set a class or
+        instance attribute if delays are constant, or should reimplement this
+        function if delays depend on the child device or instruction"""
+        return self.delay
 
     def __str__(self):
         return _formatobj(self, 'name', 'parent', 'connection')
+
+
+class StaticDevice(Device):
+    """A class whose outputs don't change during the experiment, and hence
+    which requires no clocking signal or trigger"""
+    pass
 
 
 class Output(HasInstructions, Device):
@@ -330,15 +334,29 @@ class PseudoclockDevice(TriggerableDevice):
 
 class Shot(HasDevices, HasInstructions):
     """Top level object for the compilation"""
-    allowed_instructions=[Wait]
+    allowed_instructions = [Wait]
+    allowed_devices = [PseudoclockDevice, StaticDevice]
 
     def __init__(self, name, epsilon, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.epsilon = epsilon
         self.name = name
+        self.master_pseudoclock = None
+        self.total_instructions = 0
+
+        # For our child devices looking to inherit shot and pseudoclock from
+        # their parent:
         self.shot = self
         self.pseudoclock = None
-        self.total_instructions = 0
+
+    def add_device(self, device):
+        if isinstance(device, PseudoclockDevice):
+            if self.master_pseudoclock is not None:
+                raise ValueError(f"Cannot add second master pseudoclock '{device.name}'. "
+                                 f"Already have master pseudoclock '{self.master_pseudoclock.name}'")
+            self.master_pseudoclock = device
+        super().add_device(device)
+
 
     def start(self):
         # TODO up: add_device, min clock periods
@@ -397,6 +415,7 @@ class Shot(HasDevices, HasInstructions):
 if __name__ == '__main__':
     shot = Shot('<shot>', 100e-9)
     pulseblaster = PseudoclockDevice('pulseblaster', shot, None, minimum_trigger_duration=0.1)
+    pulseblaster = PseudoclockDevice('pulseblaster', shot, None, minimum_trigger_duration=0.1)
     pulseblaster_clock = Pseudoclock('pulseblaster_clock', pulseblaster, 'clock',
                                      minimum_period=1, minimum_wait_duration=0.5, timebase=0.1)
     clockline = ClockLine('clockline', pulseblaster_clock, 'flag 1')
@@ -404,3 +423,9 @@ if __name__ == '__main__':
     ao = Output('ao', ni_card, 'ao0')
     ao.constant(t=0, value=7)
     ao.function(t=0, duration=7, function=np.sin, samplerate=20)
+    shot.wait(t=7, name='first_wait')
+
+# Compilation steps:
+# collect_descendant_limitations
+# pass_down_delays
+    # pseudoclock.child_
