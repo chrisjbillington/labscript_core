@@ -146,6 +146,17 @@ class Constant(Function):
         return _formatobj(self, 'parent', 't', 'value')
 
 
+class Static(OutputInstruction):
+    """An instruction for setting an unchanging output's value for the
+    duration of the experiment"""
+    def __init__(self, parent, value, *args, _inst_depth=1, **kwargs):
+        # A static instruction has t=0:
+        super().__init__(parent, 0, *args, _inst_depth=_inst_depth+1, **kwargs)
+
+    def __str__(self):
+        return _formatobj(self, 'parent', 'value')
+
+
 class HasInstructions(object):
     """Mixin for objects that have instructions, currently: Shot (which can
     have wait instructions) and Output (which can have all other
@@ -256,7 +267,7 @@ class StaticDevice(Device):
     pass
 
 
-class Output(HasInstructions, Device):
+class Output(Device, HasInstructions):
     allowed_instructions = [OutputInstruction]
     allowed_devices = [Device]
     def __init__(self, name, parent, connection, *args, **kwargs):
@@ -416,7 +427,6 @@ class Shot(HasDevices, HasInstructions):
 
 if __name__ == '__main__':
     shot = Shot('<shot>', 100e-9)
-    pulseblaster = PseudoclockDevice('pulseblaster', shot, None, minimum_trigger_duration=0.1)
     pulseblaster = PseudoclockDevice('pulseblaster', shot, None, minimum_trigger_duration=0.1)
     pulseblaster_clock = Pseudoclock('pulseblaster_clock', pulseblaster, 'clock',
                                      minimum_period=1, minimum_wait_duration=0.5, timebase=0.1)
