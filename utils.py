@@ -1,23 +1,23 @@
 from operator import attrgetter
 
 
-def _sort_by_time(instructions):
+def sort_by_time(instructions):
     instructions.sort(key=attrgetter('t'))
 
 
-def _sorted_by_time(instructions):
+def sorted_by_time(instructions):
     instructions = instructions.copy()
-    _sort_by_time(instructions)
+    sort_by_time(instructions)
     return instructions
 
 
-def _sort_by_quantised_time(instructions):
+def sort_by_quantised_time(instructions):
     instructions.sort(key=attrgetter('quantised_t'))
 
 
-def _sorted_by_quantised_time(instructions):
+def sorted_by_quantised_time(instructions):
     instructions = instructions.copy()
-    _sort_by_quantised_time(instructions)
+    sort_by_quantised_time(instructions)
     return instructions
 
 
@@ -31,7 +31,7 @@ def _const(c):
     return const
 
 
-def _formatobj(obj, *attrs):
+def formatobj(obj, *attrs):
     """Format an object and some arguments for printing"""
     result = obj.__class__.__name__ + "("
     for attr in attrs:

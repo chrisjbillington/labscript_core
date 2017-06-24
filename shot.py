@@ -1,7 +1,7 @@
 from bases import HasDevices, HasInstructions
 from instructions import Wait
 from devices import PseudoclockDevice, StaticDevice
-from utils import _formatobj, _sort_by_time
+from utils import formatobj, sort_by_time
 
 
 __all__ = ['Shot']
@@ -45,7 +45,7 @@ class Shot(HasDevices, HasInstructions):
 
     def compile(self):
 
-        _sort_by_time(self.waits)
+        sort_by_time(self.waits)
         
         # TODO: Quantise and relativise times 
         # TODO Error check up. First on all instructions, then on parent devices upward one
@@ -83,4 +83,4 @@ class Shot(HasDevices, HasInstructions):
 
 
     def __str__(self):
-        return _formatobj(self, 'name')
+        return formatobj(self, 'name')

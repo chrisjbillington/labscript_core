@@ -2,12 +2,7 @@ import numpy as np
 import inspect
 import traceback
 
-from utils import (_sort_by_time, _sorted_by_time,
-                   _sort_by_quantised_time, _sorted_by_quantised_time,
-                   _const, _formatobj)
-
-
-from bases import Instruction, Device, Output
+from bases import Output
 
 from instructions import Wait, OutputInstruction, Function, Constant, Static
 

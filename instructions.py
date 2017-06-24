@@ -1,5 +1,5 @@
 from bases import Instruction, OutputInstruction
-from utils import _const, _formatobj
+from utils import _const, formatobj
 
 class Wait(Instruction):
     def __init__(self, parent, t, name, *args, _inst_depth=1, **kwargs):
@@ -7,7 +7,7 @@ class Wait(Instruction):
         self.name = name
 
     def __str__(self):
-        return _formatobj(self, 'parent', 't', 'name')
+        return formatobj(self, 'parent', 't', 'name')
 
 
 class Function(OutputInstruction):
@@ -33,7 +33,7 @@ class Function(OutputInstruction):
         pass
 
     def __str__(self):
-        return _formatobj(self, 'parent', 't', 'duration', 'function', 'samplerate')
+        return formatobj(self, 'parent', 't', 'duration', 'function', 'samplerate')
 
 
 class Constant(Function):
@@ -46,7 +46,7 @@ class Constant(Function):
         self.value = value
 
     def __str__(self):
-        return _formatobj(self, 'parent', 't', 'value')
+        return formatobj(self, 'parent', 't', 'value')
 
 
 class Static(OutputInstruction):
@@ -57,4 +57,4 @@ class Static(OutputInstruction):
         super().__init__(parent, 0, *args, _inst_depth=_inst_depth+1, **kwargs)
 
     def __str__(self):
-        return _formatobj(self, 'parent', 'value')
+        return formatobj(self, 'parent', 'value')

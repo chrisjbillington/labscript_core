@@ -1,5 +1,5 @@
 import traceback
-from utils import _formatobj
+from utils import formatobj
 
 
 class Instruction(object):
@@ -46,7 +46,7 @@ class Instruction(object):
         pass
 
     def __str__(self):
-        return _formatobj(self, 'parent', 't')
+        return formatobj(self, 'parent', 't')
 
     def __repr__(self):
         return self.__str__()
@@ -158,7 +158,7 @@ class Device(HasDevices):
         return self.output_delay
 
     def __str__(self):
-        return _formatobj(self, 'name', 'parent', 'connection')
+        return formatobj(self, 'name', 'parent', 'connection')
 
 
 class Output(Device, HasInstructions):
