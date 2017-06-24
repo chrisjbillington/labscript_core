@@ -272,7 +272,10 @@ class Output(Device, HasInstructions):
     allowed_devices = [Device]
     def __init__(self, name, parent, connection, *args, **kwargs):
         super().__init__(name, parent, connection, *args, **kwargs)  
-          
+
+    # TODO: put these in non-core so that this Output class
+    # can be a base class for static outputs too
+    
     def function(self, t, duration, function, samplerate, _inst_depth=1):
         Function(self, t, duration, function, samplerate, _inst_depth=_inst_depth+1)
         return duration
@@ -280,6 +283,11 @@ class Output(Device, HasInstructions):
     def constant(self, t, value, _inst_depth=1):
         Constant(self, t, value, _inst_depth=_inst_depth+1)
         return 0
+
+
+class StaticOutput(Output):
+    """Output that only allows static instructions"""
+        allowed_instructions = [Static]
 
 
 class TriggerableDevice(Device):
