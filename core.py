@@ -222,11 +222,13 @@ class HasDevices(object):
 
 
 class Device(HasDevices):
-    # Will be interpreted as allowed_devices = [Device], but the name Device
-    # is not available during class construction. Subclasses should override
-    # this class attribute to specify which devices are allowed as children:
+    # allowed_devices = None will be interpreted as allowed_devices =
+    # [Device], but the name Device is not available during class
+    # construction. Subclasses should override this class attribute to specify
+    # which devices are allowed as children:
     allowed_devices = None
-    delay = 0
+    output_delay = 0
+
     def __init__(self, name, parent, connection, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.name = name
@@ -236,13 +238,13 @@ class Device(HasDevices):
         self.shot = self.parent.shot
         self.pseudoclock = self.parent.pseudoclock
 
-    def get_delay(self, child):
+    def get_output_delay(self, child):
         """The time elapsed between receiving a trigger/clock tick and
         providing output to a given child device or Instruction. Should be
         zero for top level devices. Subclasses should either set a class or
         instance attribute if delays are constant, or should reimplement this
         function if delays depend on the child device or instruction"""
-        return self.delay
+        return self.output_delay
 
     def __str__(self):
         return _formatobj(self, 'name', 'parent', 'connection')
