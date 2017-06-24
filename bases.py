@@ -60,9 +60,7 @@ class OutputInstruction(Instruction):
 class HasInstructions(object):
     """Mixin for objects that have instructions, currently: Shot (which can
     have wait instructions) and Output (which can have all other
-    instructions). Note that when inheriting both HasInstructions and
-    HasDevices, inheriting HasInstructions first means that the
-    all_instructions property will not recurse into child devices."""
+    instructions)."""
     allowed_instructions = [Instruction]
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -127,6 +125,39 @@ class HasDevices(object):
                 continue
             else:
                 instructions.extend(device.descendant_instructions(recurse_into_pseudoclocks))
+
+    def establish_common_limits(self):
+        """Called during shot.start(), after the device hierarchy has been
+        established, but before any instructions have been given. Subclasses
+        should implement this method to examine their children and determine
+        the minimal limitations that will satisfy all their children's
+        individual limitations, such as the smallest clock interval compatible
+        with each device's minimum update interval, etc. They should save this
+        information in instance attributes or however is appropriate for later
+        use and for inspection by their children in the case that they require
+        this information. Implementations must call this base implementation
+        before establishing their own limits, such that any child device's
+        limitations that may depend on *its* children has already been
+        established."""
+        for device in self.devices:
+            device.establish_common_limits()
+
+    #TODO: rename? configure initial attributes? get? set? assign?
+    def update_initial_attributes(self):
+        """called during shot.start(), after the device hierarchy has been
+        established, and after common limits have been established, but before
+        any instructions have been given. Subclasses should implement this
+        method to access the common limits they are interested in from their
+        parent devices, as determined in HasDevice.establish_common_limits(),
+        as well as any other information such as initial trigger times, and
+        update their attributes accordingly. This information must not
+        invalidate the results of any parent device's
+        establish_common_limits(), which has already been called and will not
+        be called again. Information set on child devices with this method is
+        mostly informational, such as t0, cum_latency, and other data that the
+        user might find it convenient to have when issuing instructions."""
+        for device in self.devices:
+            device.update_initial_attributes()
 
     def __repr__(self):
         return self.__str__()

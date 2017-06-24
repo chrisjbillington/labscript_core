@@ -1,6 +1,6 @@
 from bases import HasDevices, HasInstructions
 from instructions import Wait
-from devices import PseudoclockDevice, StaticDevice
+from devices import PseudoclockDevice, StaticDevice, Pseudoclock
 from utils import formatobj, sort_by_time
 
 
@@ -17,6 +17,8 @@ class Shot(HasDevices, HasInstructions):
         self.epsilon = epsilon
         self.name = name
         self.master_pseudoclock = None
+        self.all_devices = None
+        self.all_pseudoclocks = None
         self.total_instructions = 0
 
         # For our child devices looking to inherit shot and pseudoclock from
@@ -27,17 +29,31 @@ class Shot(HasDevices, HasInstructions):
     def add_device(self, device):
         if isinstance(device, PseudoclockDevice):
             if self.master_pseudoclock is not None:
-                raise ValueError(f"Cannot add second master pseudoclock '{device.name}'. "
-                                 f"Already have master pseudoclock '{self.master_pseudoclock.name}'")
+                raise ValueError(f"Cannot add second master pseudoclock "
+                                 f"device '{device.name}'. Already have master "
+                                 f"pseudoclock device '{self.master_pseudoclock.name}'")
             self.master_pseudoclock = device
         super().add_device(device)
 
+    def establish_common_limits(self):
+        super().establish_common_limits()
+        # TODO: determine nominal wait duration
 
     def start(self):
-        # TODO up: add_device, min clock periods
-        # down: delays
-        # triggers
-        pass
+        # Populate lists of devices:
+        self.all_devices = self.descendant_devices(recurse_into_pseudoclocks=True)
+        self.all_pseudoclocks = [d for d in self.all_devices if isinstance(d, Pseudoclock)]
+
+        # Have devices compute the limitations common to their children
+        self.establish_common_limits()
+        # Have devices inherit the information they need from their parents, 
+        # including those common limits they are interested in.
+        self.update_initial_attributes()
+
+        # TODO: trigger pseudoclocks.
+        # TODO: Enum for trigger start time - EARLIEST LATEST
+        # TODO: return max delay? Maybe only max delay of pseudoclocks that didn't have
+        # an initial trigger time other than minimum set.
 
     def wait(self, t, name):
         Wait(self, t, name)
@@ -50,7 +66,6 @@ class Shot(HasDevices, HasInstructions):
         # TODO: Quantise and relativise times 
         # TODO Error check up. First on all instructions, then on parent devices upward one
         # layer at a time
-
         
         for pseudoclock in self.children:
             self.compile_pseudoclock(pseudoclock, waits)
