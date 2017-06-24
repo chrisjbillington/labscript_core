@@ -37,7 +37,7 @@ class Shot(HasDevices, HasInstructions):
 
     def establish_common_limits(self):
         super().establish_common_limits()
-        # TODO: determine nominal wait duration
+        # TODO: determine nom_wait_delay from pseudoclocks.
 
     def start(self):
         # Populate lists of devices:

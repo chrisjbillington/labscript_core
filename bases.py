@@ -79,14 +79,14 @@ class HasInstructions(object):
 class HasDevices(object):
     """Mixin for objects that have child devices, currently: Shot and
     Device."""
-    # Will be interpreted as allowed_devices = [Device], but the name Device
-    # is not available yet. Subclasses should override this class attribute to
-    # specify which devices are allowed as children:
-    allowed_devices = None
+    # HasDevices.allowed_devices = [] will be replaced with
+    # HasDevices.allowed_devices = [Device] after the Device class is defined
+    # below in this file (the name Device is not yet available). Subclasses
+    # should override this class attribute to specify which devices are
+    # allowed as children.
+    allowed_devices = []
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        if self.allowed_devices is None:
-            self.allowed_devices = [Device]
         self.devices = []
 
     def add_device(self, device):
@@ -164,11 +164,11 @@ class HasDevices(object):
 
 
 class Device(HasDevices):
-    # allowed_devices = None will be interpreted as allowed_devices =
-    # [Device], but the name Device is not available during class
-    # construction. Subclasses should override this class attribute to specify
+    # Device.allowed_devices = [] will be replaced with Device.allowed_devices
+    # = [Device], after class construction is complete (the name is not yet
+    # available). Subclasses should override this class attribute to specify
     # which devices are allowed as children:
-    allowed_devices = None
+    allowed_devices = []
     output_delay = 0
 
     def __init__(self, name, parent, connection, *args, **kwargs):
@@ -190,6 +190,12 @@ class Device(HasDevices):
 
     def __str__(self):
         return formatobj(self, 'name', 'parent', 'connection')
+
+
+# Now that Device is defined, we can set allowed_devices on HasDevices and
+# Device:
+HasDevices.allowed_devices = [Device]
+Device.allowed_devices = [Device]
 
 
 class Output(Device, HasInstructions):
