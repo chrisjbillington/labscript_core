@@ -27,7 +27,7 @@ class Shot(HasDevices, HasInstructions):
         self.pseudoclock = None
 
         # The phase of compilation we are up to:
-        self.phase = phase.DEFINE_CONNECTION_TABLE
+        self.phase = phase.ADD_DEVICES
 
     def add_device(self, device):
         if isinstance(device, PseudoclockDevice):

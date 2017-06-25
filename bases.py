@@ -6,7 +6,7 @@ class Instruction(object):
     @enforce_phase(phase.ADD_INSTRUCTIONS)
     def __init__(self, parent, t, *args, _inst_depth=1, **kwargs):
         """Base instruction class. Has an initial time, and that's about it.
-        __inst_depth is the stack depth of functions that are wrappers around
+        _inst_depth is the stack depth of functions that are wrappers around
         instantiating Instructions. All such functions (including the __init__
         method of subclasses of Instruction) should accept an _inst_depth=1
         keyword argument, and should pass inst_depth=_inst_depth+1 to the
@@ -85,6 +85,7 @@ class HasDevices(HasChildren):
         self.common_limits_established = False
         self.initial_attributes_established = False
 
+    @enforce_phase(phase.ADD_DEVICES)
     def add_device(self, device):
         if not any(isinstance(device, cls) for cls in self.allowed_devices):
             msg = (f"Device of type {device.__class__.__name__} "
@@ -179,6 +180,7 @@ class HasInstructions(HasChildren):
         super().__init__(*args, **kwargs)
         self.instructions = []
 
+    @enforce_phase(phase.ADD_INSTRUCTIONS)
     def add_instruction(self, instruction):
         if not any(isinstance(instruction, cls) for cls in self.allowed_instructions):
             msg = f"Instruction of type {device.__class__.__name__} not permitted by {self}"
@@ -204,7 +206,7 @@ class Device(HasDevices):
     # which devices are allowed as children:
     allowed_devices = []
     output_delay = 0
-
+    @enforce_phase(phase.ADD_DEVICES)
     def __init__(self, name, parent, connection, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.name = name

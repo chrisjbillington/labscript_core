@@ -8,7 +8,7 @@ class phase(IntEnum):
 
     # The following compilation steps happen in this order.
 
-    DEFINE_CONNECTION_TABLE = 0
+    ADD_DEVICES = 0
     ESTABLISH_COMMON_LIMITS = 1
     ESTABLISH_INITIAL_ATTRIBUTES = 2
     ADD_INSTRUCTIONS = 3
@@ -25,10 +25,17 @@ def enforce_phase(phase):
             try:
                 shot = self.shot
             except AttributeError:
-                # If it's an __init__ method then the shot attribute doesn't
-                # exist yet - but the parent is the first argument after self
-                # so we can get it there:
-                shot = args[0].shot
+                # If it's an __init__ method then the parent is one of the
+                # arguments:
+                from bases import Device, Instruction
+                if isinstance(self, Device):
+                    shot = args[1].shot
+                elif isinstance(self, Instruction):      
+                    shot = args[0].shot
+                else:
+                    msg = (f"enforce_phase doesn't know "
+                           f"about classes of type {self.__class__.__name__}")
+                    raise TypeError()
             if shot.phase != phase:
                 msg = (f"{self.__class__.__name__}.{method.__name__}() "
                        f"cannot be called in phase {shot.phase.name}")
