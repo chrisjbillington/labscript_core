@@ -86,11 +86,11 @@ class Shot(HasDevices, HasInstructions):
     # if isinstance(self.parent_device, Shot):
     #     self.shot = parent_device
     #     self.t0 = 0
-    #     self.wait_prep_duration = self.minimum_wait_duration
+    #     self.wait_prep_duration = self.wait_delay
     # else:
     #     self.shot = parent.shot
     #     self.t0 = parent.t0 + parent.trigger_delay(self)
-    #     self.wait_prep_duration = self.minimum_wait_duration + shot.epsilon - self.t0
+    #     self.wait_prep_duration = self.wait_delay + shot.epsilon - self.t0
 
     # if isinstance(self, Pseudoclock):
     #     self.pseudoclock = self

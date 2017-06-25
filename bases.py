@@ -101,6 +101,7 @@ class HasDevices(object):
         True, then pseudoclocks that are descendants of this instance, and all
         of their descendants (including further pseudoclocks and so on) will
         be returned as well, otherwise they will be excluded."""
+        from devices import Pseudoclock
         devices = []
         for device in self.devices:
             if isinstance(device, Pseudoclock) or not recurse_into_pseudoclocks:
@@ -108,6 +109,7 @@ class HasDevices(object):
             else:
                 devices.append(device)
                 devices.extend(device.descendant_devices(recurse_into_pseudoclocks))
+        return devices
 
     def descendant_instructions(self, recurse_into_pseudoclocks=False):
         """Recursively return instructions of all devices that are descendants
@@ -116,6 +118,7 @@ class HasDevices(object):
         that are descendants of this instance, and all of their descendants
         (including further pseudoclocks and so one) will be returned as well,
         otherwise they will be excluded."""
+        from devices import Pseudoclock
         if isinstance(self, HasInstructions):
             instructions = self.instructions.copy()
         else:
@@ -125,6 +128,7 @@ class HasDevices(object):
                 continue
             else:
                 instructions.extend(device.descendant_instructions(recurse_into_pseudoclocks))
+        return instructions
 
     def establish_common_limits(self):
         """Called during shot.start(), after the device hierarchy has been
