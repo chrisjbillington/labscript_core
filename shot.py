@@ -51,7 +51,7 @@ class Shot(HasDevices, HasInstructions):
         self.update_initial_attributes()
 
         # TODO: trigger pseudoclocks.
-        # TODO: Enum for trigger start time - EARLIEST LATEST
+        # TODO: Enum/dummy for trigger start time? - EARLIEST LATEST etc? arithmetic? - t0, t0 + etc. 
         # TODO: return max delay? Maybe only max delay of pseudoclocks that didn't have
         # an initial trigger time other than minimum set.
 
@@ -63,9 +63,10 @@ class Shot(HasDevices, HasInstructions):
 
         sort_by_time(self.waits)
         
-        # TODO: Quantise and relativise times 
-        # TODO Error check up. First on all instructions, then on parent devices upward one
-        # layer at a time
+        # TODO: Tell all instructions to quantise and relativise their times 
+        # TODO Error check upward. First on all instructions, then on parent devices upward one
+        # layer at a time. Each layer should do the error checks that are most appropriate for that
+        # level.
         
         for pseudoclock in self.children:
             self.compile_pseudoclock(pseudoclock, waits)
@@ -81,7 +82,7 @@ class Shot(HasDevices, HasInstructions):
             print(inst)
 
 
-    # TODO: all this inheritance business:
+    # TODO: all this business:
     # if isinstance(self.parent_device, Shot):
     #     self.shot = parent_device
     #     self.t0 = 0

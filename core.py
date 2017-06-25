@@ -39,7 +39,7 @@ if __name__ == '__main__':
 
 # Variable names:
 #   latency:                float or dict by connection, or dict by instruction class. Or override get_latency(dev or inst)
-#   cum_latency:            float. latency including all channels up to the master pseudoclock
+#   parents_latency:        float. latency including all channels up to the master pseudoclock
 #   min_trigger_duration:   float. minimum trigger required by TriggerableDevice or ClockableDevice
 #   common_min_trigger_duration:   float: min trigger duration that satisfies all devices under this pseudoclock (rounded up to timebase)
 #   wait_delay:             float: how long a pseudoclock waits at minimum

@@ -204,8 +204,10 @@ class Output(Device, HasInstructions):
     def __init__(self, name, parent, connection, *args, **kwargs):
         super().__init__(name, parent, connection, *args, **kwargs)  
 
-    # TODO: put these in non-core so that this Output class
-    # can be a base class for static outputs too
+    # TODO: put these in non-core so that this Output class can be a base
+    # class for static outputs too. Or add a DynamicOutput class that these
+    # belong to. Or maybe leave them in and have StaticOutput reimplement them
+    # with just raising TypeError.
 
     def function(self, t, duration, function, samplerate, _inst_depth=1):
         from instructions import Function
