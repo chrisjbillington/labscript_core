@@ -48,13 +48,15 @@ class HasParent(object):
     hierarchy."""
     # Class attribute to store a list of objects by what shot they belong to,
     # so that we can do checks on all the descendants of a shot when it asks.
-    # WeakKeyDictionary so that it vanishes when the shot does.
+    # WeakKeyDictionary so that it vanishes when the shot does. All subclasses
+    # will access this same mutable attribute:
     __instances_by_shot = weakref.WeakKeyDictionary()
 
     # Set of methods of each class that are required to be called exactly once
-    # on each instance in a given phase. Format: {phase: set(method,
-    # other_method, ...)).
-    _methods_required_once_by_phase = {}
+    # on each instance in a given phase. Format: {phase: {class: set(method,
+    # other_method, ...)}). All subclasses will access this same mutable
+    # attribute:
+    __methods_required_once_by_phase = {}
 
     def __init__(self, parent):
         self.parent = parent
@@ -99,7 +101,9 @@ class HasParent(object):
             elif exactly_once:
                 # Mark the method as needing to be called exactly once in each
                 # phase:
-                cls._methods_required_once_by_phase.setdefault(phase, set()).add(method)
+                methods_this_phase = cls.__methods_required_once_by_phase.setdefault(phase, {})
+                methods_this_class = methods_this_phase.setdefault(cls, set())
+                methods_this_class.add(method)
 
             @wraps(method)
             def check_phase(self, *args, **kwargs):
@@ -138,13 +142,15 @@ class HasParent(object):
     def _check_required_methods_called(self, phase):
         """Confirm that at the end of given phase, all methods that were
         marked as needing to be called exactly once were called"""
-        required = self._methods_required_once_by_phase.setdefault(phase, set())
-        called = self._required_methods_called_by_phase.setdefault(phase, set())
-        for method in required:
-            if method not in called:
-                msg = (f"{self.__class__.__name__}.{method.__name__}() "
-                       f"not called by end of phase {phase.name}")
-                raise NotCalledError(msg)
+        called_methods = self._required_methods_called_by_phase.setdefault(phase, set())
+        required_this_phase = self.__methods_required_once_by_phase.setdefault(phase, {})
+        for cls, required_methods in required_this_phase.items():
+            if isinstance(self, cls) and (required_methods - called_methods):
+                for method in (required_methods - called_methods):
+                    # Just raise an exception about one of them:
+                    msg = (f"{self.__class__.__name__}.{method.__name__}() "
+                           f"not called by end of phase {phase.name}")
+                    raise NotCalledError(msg)
 
         #TODO:
         # When decorated, if exactly_once is True, add to instance attribute 
