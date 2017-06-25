@@ -18,10 +18,10 @@ if __name__ == '__main__':
     clockline = ClockLine('clockline', pulseblaster_clock, 'flag 1')
     ni_card = ClockableDevice('ni_card', clockline, 'clock', minimum_trigger_duration=0.1, clock_limit=1.2)
     ao = Output('ao', ni_card, 'ao0')
-    ao.constant(t=0, value=7)
-    ao.function(t=0, duration=7, function=np.sin, samplerate=20)
     shot.start()
     shot.wait(t=7, name='first_wait')
+    ao.constant(t=0, value=7)
+    ao.function(t=0, duration=7, function=np.sin, samplerate=20)
 
 
 # TODO list:

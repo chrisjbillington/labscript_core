@@ -29,7 +29,7 @@ class Function(OutputInstruction):
         self.values = None
 
 
-    def _convert_times(self, waits):
+    def convert_timing(self, waits):
         pass
 
     def __str__(self):

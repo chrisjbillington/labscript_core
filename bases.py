@@ -1,8 +1,9 @@
 import traceback
-from utils import formatobj
+from utils import formatobj, phase, enforce_phase
 
 
 class Instruction(object):
+    @enforce_phase(phase.ADD_INSTRUCTIONS)
     def __init__(self, parent, t, *args, _inst_depth=1, **kwargs):
         """Base instruction class. Has an initial time, and that's about it.
         __inst_depth is the stack depth of functions that are wrappers around
@@ -35,7 +36,8 @@ class Instruction(object):
         self.instruction_number = self.parent.shot.total_instructions
         self.parent.shot.total_instructions += 1
 
-    def _convert_times(self, waits):
+    @enforce_phase(phase.CONVERT_TIMING)
+    def convert_timing(self, waits):
         """Convert all times specified by this instruction to ones relative to
         the start of our controlling pseudoclock, taking into account the
         effects of waits, and compute them as an integer in units of the
@@ -68,8 +70,8 @@ class HasInstructions(object):
 
     def add_instruction(self, instruction):
         if not any(isinstance(instruction, cls) for cls in self.allowed_instructions):
-            raise TypeError(f"Instruction of type {device.__class__.__name__} not permitted " 
-                            f"by {self}.")
+            msg = f"Instruction of type {device.__class__.__name__} not permitted by {self}"
+            raise TypeError(msg)
         self.instructions.append(instruction)
 
     def __repr__(self):
@@ -89,10 +91,17 @@ class HasDevices(object):
         super().__init__(*args, **kwargs)
         self.devices = []
 
+        # Used to enforce that the two methods establish_common_limits() and
+        # establish_initial_attributes() are called exactly once during
+        # compilation:
+        self.common_limits_established = False
+        self.initial_attributes_established = False
+
     def add_device(self, device):
         if not any(isinstance(device, cls) for cls in self.allowed_devices):
-            raise TypeError(f"Device of type {device.__class__.__name__} not permitted " 
-                            f"as child of {self}.")
+            msg = (f"Device of type {device.__class__.__name__} "
+                   f"not permitted as child of {self}.")
+            raise TypeError(msg)
         self.devices.append(device)
 
     def descendant_devices(self, recurse_into_pseudoclocks=False):
@@ -130,6 +139,7 @@ class HasDevices(object):
                 instructions.extend(device.descendant_instructions(recurse_into_pseudoclocks))
         return instructions
 
+    @enforce_phase(phase.ESTABLISH_COMMON_LIMITS)
     def establish_common_limits(self):
         """Called during shot.start(), after the device hierarchy has been
         established, but before any instructions have been given. Subclasses
@@ -143,11 +153,15 @@ class HasDevices(object):
         before establishing their own limits, such that any child device's
         limitations that may depend on *its* children has already been
         established."""
+        if self.common_limits_established:
+            msg = f"establish_common_limits() already called on instance {self}"
+            raise RuntimeError(msg)
         for device in self.devices:
             device.establish_common_limits()
+        self.common_limits_established = True
 
-    #TODO: rename? configure initial attributes? get? set? assign?
-    def update_initial_attributes(self):
+    @enforce_phase(phase.ESTABLISH_INITIAL_ATTRIBUTES)
+    def establish_initial_attributes(self):
         """called during shot.start(), after the device hierarchy has been
         established, and after common limits have been established, but before
         any instructions have been given. Subclasses should implement this
@@ -160,8 +174,12 @@ class HasDevices(object):
         be called again. Information set on child devices with this method is
         mostly informational, such as t0, cum_latency, and other data that the
         user might find it convenient to have when issuing instructions."""
+        if self.initial_attributes_established:
+            msg = f"establish_initial_attributes() already called on instance {self}"
+            raise RuntimeError(msg)
         for device in self.devices:
-            device.update_initial_attributes()
+            device.establish_initial_attributes()
+        self.initial_attributes_established = True
 
     def __repr__(self):
         return self.__str__()
