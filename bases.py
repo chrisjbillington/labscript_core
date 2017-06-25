@@ -1,19 +1,160 @@
 import traceback
-from utils import formatobj, phase, enforce_phase
+import weakref
+from enum import IntEnum
+from functools import wraps
+
+from utils import formatobj
+
+
+# Determines whether the enforce_phase decorator has any effect. Useful to set
+# to False when not debugging or developing, to ensure there is no adverse
+# performance hit from checking every method call.
+ENFORCE_PHASE = True
+
+
+# Exception classes for when the phase enforcement detects a problem:
+class PhaseError(RuntimeError):
+    pass
+
+class WrongPhaseError(PhaseError):
+    pass
+
+class AlreadyCalledError(PhaseError):
+    pass
+
+class NotCalledError(PhaseError):
+    pass
+
+
+class phase(IntEnum):
+    """Enum for what 'phase' of compilation we are up to, to enforce certain
+    methods only be called in certain phases"""
+
+    # The following compilation steps happen in this order.
+
+    ADD_DEVICES = 0
+    ESTABLISH_COMMON_LIMITS = 1
+    ESTABLISH_INITIAL_ATTRIBUTES = 2
+    ADD_INSTRUCTIONS = 3
+    CONVERT_TIMING = 4
+    CHECK_INSTRUCTIONS_VALID = 5
 
 
 class HasParent(object):
     """Base class for all objects that have a parent, such as Instructions and
     Devices. For our purposes the Shot class is also an instance of HasParent
-    - its parent is itself. At the moment This class only contains debugging
+    - its parent is itself. At the moment this class only contains debugging
     functionality common to all objects in the shot/device/instruction
     hierarchy."""
+    # Class attribute to store a list of objects by what shot they belong to,
+    # so that we can do checks on all the descendants of a shot when it asks.
+    # WeakKeyDictionary so that it vanishes when the shot does.
+    __instances_by_shot = weakref.WeakKeyDictionary()
+
+    # Set of methods of each class that are required to be called exactly once
+    # on each instance in a given phase. Format: {phase: set(method,
+    # other_method, ...)).
+    _methods_required_once_by_phase = {}
+
     def __init__(self, parent):
         self.parent = parent
         if parent is self:
             self.shot = self
+            self.phase = None
         else:
             self.shot = parent.shot
+
+        # Dictionary to store whether methods to be called exactly once have
+        # been called. Format: {phase: set(method, other_method, ...)),}.
+        self._required_methods_called_by_phase = {}
+        descendents_of_shot = self.__instances_by_shot.setdefault(self.shot, [])
+        descendents_of_shot.append(self)
+
+
+    def set_phase(self, phase):
+        from shot import Shot
+        if not isinstance(self, Shot):
+            msg = "Only an instance of Shot can set the compilation phase"
+            raise RuntimeError(msg)
+        if self.phase is not None:
+             # Check that methods were called as required in the current phase:
+            for instance in self.__instances_by_shot[self]:
+                instance._check_required_methods_called(self.phase)
+        # Set the new phase
+        self.phase = phase
+
+
+    @classmethod
+    def enforce_phase(cls, phase, exactly_once=False):
+        """Decorate an instance method to enforce that it only be called in a
+        particular phase of the compilation process, and if required, that it
+        be called exactly once during that phase """
+
+        def decorator(method):
+            if not ENFORCE_PHASE:
+                return method
+            if exactly_once and method.__name__ == '__init__':
+                msg = "No need to set exactly_once=True on an __init__ method"
+                raise ValueError(msg)
+            elif exactly_once:
+                # Mark the method as needing to be called exactly once in each
+                # phase:
+                cls._methods_required_once_by_phase.setdefault(phase, set()).add(method)
+
+            @wraps(method)
+            def check_phase(self, *args, **kwargs):
+                try:
+                    shot = self.shot
+                except AttributeError:
+                    # If it's an __init__ method then the parent is one of the
+                    # arguments:
+                    from bases import Device, Instruction
+                    if isinstance(self, Device):
+                        shot = args[1].shot
+                    elif isinstance(self, Instruction):      
+                        shot = args[0].shot
+                    else:
+                        msg = (f"enforce_phase doesn't know "
+                               f"about classes of type {self.__class__.__name__}")
+                        raise TypeError()
+                if shot.phase != phase:
+                    msg = (f"{self.__class__.__name__}.{method.__name__}() "
+                           f"cannot be called in phase {shot.phase.name}")
+                    raise WrongPhaseError(msg)
+                if exactly_once:
+                    called = self._required_methods_called_by_phase.setdefault(phase, set())
+                    if method in called:
+                        msg = (f"{self} has already had {method.__name__}() "
+                               f"called once in phase {shot.phase.name}")
+                        raise AlreadyCalledError(msg)
+                    self._required_methods_called_by_phase[phase].add(method)
+                return method(self, *args, **kwargs)
+
+            return check_phase
+
+        return decorator
+
+
+    def _check_required_methods_called(self, phase):
+        """Confirm that at the end of given phase, all methods that were
+        marked as needing to be called exactly once were called"""
+        required = self._methods_required_once_by_phase.setdefault(phase, set())
+        called = self._required_methods_called_by_phase.setdefault(phase, set())
+        for method in required:
+            if method not in called:
+                msg = (f"{self.__class__.__name__}.{method.__name__}() "
+                       f"not called by end of phase {phase.name}")
+                raise NotCalledError(msg)
+
+        #TODO:
+        # When decorated, if exactly_once is True, add to instance attribute 
+        # saying whether it's been called or not. Make the decorator check
+        # this attribute upon calling to confirm it hasn't been called before,
+        # and make _phase_end_checks confirm it was called once.
+
+
+# Pop the decorator out to the top level for importing by others:
+enforce_phase = HasParent.enforce_phase
 
 
 class Instruction(HasParent):
@@ -48,7 +189,7 @@ class Instruction(HasParent):
         self.instruction_number = self.parent.shot.total_instructions
         self.parent.shot.total_instructions += 1
 
-    @enforce_phase(phase.CONVERT_TIMING)
+    @enforce_phase(phase.CONVERT_TIMING, exactly_once=True)
     def convert_timing(self, waits):
         """Convert all times specified by this instruction to ones relative to
         the start of our controlling pseudoclock, taking into account the
@@ -137,7 +278,7 @@ class HasDevices(HasChildren):
                 instructions.extend(device.descendant_instructions(recurse_into_pseudoclocks))
         return instructions
 
-    @enforce_phase(phase.ESTABLISH_COMMON_LIMITS)
+    @enforce_phase(phase.ESTABLISH_COMMON_LIMITS, exactly_once=True)
     def establish_common_limits(self):
         """Called during shot.start(), after the device hierarchy has been
         established, but before any instructions have been given. Subclasses
@@ -151,14 +292,10 @@ class HasDevices(HasChildren):
         before establishing their own limits, such that any child device's
         limitations that may depend on *its* children has already been
         established."""
-        if self.common_limits_established:
-            msg = f"establish_common_limits() already called on instance {self}"
-            raise RuntimeError(msg)
         for device in self.devices:
             device.establish_common_limits()
-        self.common_limits_established = True
 
-    @enforce_phase(phase.ESTABLISH_INITIAL_ATTRIBUTES)
+    @enforce_phase(phase.ESTABLISH_INITIAL_ATTRIBUTES, exactly_once=True)
     def establish_initial_attributes(self):
         """called during shot.start(), after the device hierarchy has been
         established, and after common limits have been established, but before
@@ -170,14 +307,10 @@ class HasDevices(HasChildren):
         invalidate the results of any parent device's
         establish_common_limits(), which has already been called and will not
         be called again. Information set on child devices with this method is
-        mostly informational, such as t0, cum_latency, and other data that the
+        mostly informational, such as t0, ancestor_latency, and other data that the
         user might find it convenient to have when issuing instructions."""
-        if self.initial_attributes_established:
-            msg = f"establish_initial_attributes() already called on instance {self}"
-            raise RuntimeError(msg)
         for device in self.devices:
             device.establish_initial_attributes()
-        self.initial_attributes_established = True
 
     def __repr__(self):
         return self.__str__()

@@ -40,8 +40,8 @@ if __name__ == '__main__':
 #   wait_delay:                         float: how long a pseudoclock waits at minimum
 #   nominal_wait_delay:                 float: property of shot: the wait delay that satisfies all devices
 #   prewait_overtime                    float: how long a device can still issue instructions after a call to wait() before the wait occurs for it.
-#   clock_limit:                        int: shortest clock tick a PseudoClock can make or a ClockedDevice can receive (mult. of timebase)
-#   common_clock_limit:                 int: shortest clock tick all devices under this pseudoclock can deal with (mult. of timebase)
+#   clock_limit:                        float: shortest clock tick a PseudoClock can make or a ClockedDevice can receive
+#   common_clock_limit:                 float: shortest clock tick all devices under this pseudoclock can deal with (or int? quantised and rounded up?)
 #   t0:                                 method returning float: initial trigger time + ancestor_latency + get_latency(device_or_instruction)
 #   postwait_t0:                        method returning float: ancestor_latency + get_latency(device_or_instruction)
 #   get_t0, get_postwait_t0             possibly make the above two methods properties for the case where latency is a float, and have them raise an error if it's not, directing the user to use these methods instead.
