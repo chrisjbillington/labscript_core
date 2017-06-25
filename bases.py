@@ -2,7 +2,21 @@ import traceback
 from utils import formatobj, phase, enforce_phase
 
 
-class Instruction(object):
+class HasParent(object):
+    """Base class for all objects that have a parent, such as Instructions and
+    Devices. For our purposes the Shot class is also an instance of HasParent
+    - its parent is itself. At the moment This class only contains debugging
+    functionality common to all objects in the shot/device/instruction
+    hierarchy."""
+    def __init__(self, parent):
+        self.parent = parent
+        if parent is self:
+            self.shot = self
+        else:
+            self.shot = parent.shot
+
+
+class Instruction(HasParent):
     @enforce_phase(phase.ADD_INSTRUCTIONS)
     def __init__(self, parent, t, *args, _inst_depth=1, **kwargs):
         """Base instruction class. Has an initial time, and that's about it.
@@ -17,11 +31,9 @@ class Instruction(object):
         of user code that resulted in creating the instruction (internal
         labscript tracebacks, unless labscript itself has crashed, are not
         useful)."""
-        super().__init__(*args, **kwargs)
-        self.parent = parent
+        super().__init__(parent)
         self.t = t
         self.parent.add_instruction(self)
-        self.shot = parent.shot
         self.pseudoclock = parent.pseudoclock
 
         # Timing details to be computed during processing:
@@ -59,7 +71,7 @@ class OutputInstruction(Instruction):
     pass
 
 
-class HasChildren(object):
+class HasChildren(HasParent):
     """Base class for HasInstructions and HasDevices to allow cooperative
     multiple inheritance from them"""
     def descendant_instructions(self, recurse_into_pseudoclocks=False):
@@ -75,8 +87,8 @@ class HasDevices(HasChildren):
     # should override this class attribute to specify which devices are
     # allowed as children.
     allowed_devices = []
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, parent):
+        super().__init__(parent)
         self.devices = []
 
         # Used to enforce that the two methods establish_common_limits() and
@@ -176,8 +188,8 @@ class HasInstructions(HasChildren):
     have wait instructions) and Output (which can have all other
     instructions)."""
     allowed_instructions = [Instruction]
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, parent):
+        super().__init__(parent)
         self.instructions = []
 
     @enforce_phase(phase.ADD_INSTRUCTIONS)
@@ -207,13 +219,11 @@ class Device(HasDevices):
     allowed_devices = []
     output_delay = 0
     @enforce_phase(phase.ADD_DEVICES)
-    def __init__(self, name, parent, connection, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, name, parent, connection):
+        super().__init__(parent)
         self.name = name
-        self.parent = parent
         self.connection = connection
         self.parent.add_device(self)
-        self.shot = self.parent.shot
         self.pseudoclock = self.parent.pseudoclock
 
     def get_output_delay(self, child):
@@ -237,8 +247,8 @@ Device.allowed_devices = [Device]
 class Output(Device, HasInstructions):
     allowed_instructions = [OutputInstruction]
     allowed_devices = [Device]
-    def __init__(self, name, parent, connection, *args, **kwargs):
-        super().__init__(name, parent, connection, *args, **kwargs)  
+    def __init__(self, name, parent, connection):
+        super().__init__(name, parent, connection)  
 
     # TODO: put these in non-core so that this Output class can be a base
     # class for static outputs too. Or add a DynamicOutput class that these

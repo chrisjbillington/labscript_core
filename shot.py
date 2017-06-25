@@ -13,7 +13,7 @@ class Shot(HasDevices, HasInstructions):
     allowed_devices = [PseudoclockDevice, StaticDevice]
 
     def __init__(self, name, epsilon, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        super().__init__(self)
         self.epsilon = epsilon
         self.name = name
         self.master_pseudoclock = None
@@ -83,8 +83,8 @@ class Shot(HasDevices, HasInstructions):
         # TODO: return max delay? Maybe only max delay of pseudoclocks that didn't have
         # an initial trigger time other than minimum set.
 
-    def wait(self, t, name):
-        Wait(self, t, name)
+    def wait(self, t, name, _inst_depth=1):
+        Wait(self, t, name, _inst_depth=_inst_depth+1)
         # TODO: triggers
 
     def stop(self, t):

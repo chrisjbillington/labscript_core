@@ -16,7 +16,6 @@ class Function(OutputInstruction):
                  *args, _inst_depth=1, **kwargs):
         super().__init__(parent, t, *args, _inst_depth=_inst_depth+1, **kwargs)
         self.function = function
-        self.parent = parent
         self.duration = duration
         self.samplerate = samplerate
 

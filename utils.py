@@ -2,6 +2,12 @@ from operator import attrgetter
 from enum import IntEnum
 from functools import wraps
 
+# Determines whether the enforce_phase decorator has any effect. Useful to set
+# to False when not debugging or developing, to ensure there is no adverse
+# performance hit from checking every method call.
+ENFORCE_PHASE = True
+
+
 class phase(IntEnum):
     """Enum for what 'phase' of compilation we are up to, to enforce certain
     methods only be called in certain phases"""
@@ -17,9 +23,11 @@ class phase(IntEnum):
 
 
 def enforce_phase(phase):
-    """Decorate an instance method to enforce that it only be called
-    in a particular phase of the compilation process"""
+    """Decorate an instance method to enforce that it only be called in a
+    particular phase of the compilation process. Can be disabled if """
     def decorator(method):
+        if not ENFORCE_PHASE:
+            return method
         @wraps(method)
         def check_phase(self, *args, **kwargs):
             try:
