@@ -12,7 +12,8 @@ class phase(IntEnum):
     ESTABLISH_COMMON_LIMITS = 1
     ESTABLISH_INITIAL_ATTRIBUTES = 2
     ADD_INSTRUCTIONS = 3
-    CONVERT_TIMING = 1
+    CONVERT_TIMING = 4
+    CHECK_INSTRUCTIONS_VALID = 5
 
 
 def enforce_phase(phase):

@@ -87,7 +87,7 @@ class Shot(HasDevices, HasInstructions):
         Wait(self, t, name)
         # TODO: triggers
 
-    def compile(self):
+    def stop(self, t):
 
         sort_by_time(self.waits)
         
@@ -96,34 +96,6 @@ class Shot(HasDevices, HasInstructions):
         # layer at a time. Each layer should do the error checks that are most appropriate for that
         # level.
         
-        for pseudoclock in self.children:
-            self.compile_pseudoclock(pseudoclock, waits)
-
-    def _compile_pseudoclock(self, pseudoclock, waits):
-        # Get all instructions on this pseudoclock:
-        instructions = pseudoclock.get_instructions()
-
-        # Process waits. 
-        # Compute the time of each instruction relative to the start of its
-        # pseudoclock:
-        for inst in instructions:
-            print(inst)
-
-
-    # TODO: all this business:
-    # if isinstance(self.parent_device, Shot):
-    #     self.shot = parent_device
-    #     self.t0 = 0
-    #     self.wait_prep_duration = self.wait_delay
-    # else:
-    #     self.shot = parent.shot
-    #     self.t0 = parent.t0 + parent.trigger_delay(self)
-    #     self.wait_prep_duration = self.wait_delay + shot.epsilon - self.t0
-
-    # if isinstance(self, Pseudoclock):
-    #     self.pseudoclock = self
-    # else:
-    #     self.pseudoclock = parent.pseudoclock
 
 
     def __str__(self):

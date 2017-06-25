@@ -59,26 +59,14 @@ class OutputInstruction(Instruction):
     pass
 
 
-class HasInstructions(object):
-    """Mixin for objects that have instructions, currently: Shot (which can
-    have wait instructions) and Output (which can have all other
-    instructions)."""
-    allowed_instructions = [Instruction]
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.instructions = []
-
-    def add_instruction(self, instruction):
-        if not any(isinstance(instruction, cls) for cls in self.allowed_instructions):
-            msg = f"Instruction of type {device.__class__.__name__} not permitted by {self}"
-            raise TypeError(msg)
-        self.instructions.append(instruction)
-
-    def __repr__(self):
-        return self.__str__()
+class HasChildren(object):
+    """Base class for HasInstructions and HasDevices to allow cooperative
+    multiple inheritance from them"""
+    def descendant_instructions(self, recurse_into_pseudoclocks=False):
+        return []
 
 
-class HasDevices(object):
+class HasDevices(HasChildren):
     """Mixin for objects that have child devices, currently: Shot and
     Device."""
     # HasDevices.allowed_devices = [] will be replaced with
@@ -128,10 +116,7 @@ class HasDevices(object):
         (including further pseudoclocks and so one) will be returned as well,
         otherwise they will be excluded."""
         from devices import Pseudoclock
-        if isinstance(self, HasInstructions):
-            instructions = self.instructions.copy()
-        else:
-            instructions = []
+        instructions = super().descendant_instructions(recurse_into_pseudoclocks)
         for device in self.devices:
             if isinstance(device, Pseudoclock) or not recurse_into_pseudoclocks:
                 continue
@@ -180,6 +165,33 @@ class HasDevices(object):
         for device in self.devices:
             device.establish_initial_attributes()
         self.initial_attributes_established = True
+
+    def __repr__(self):
+        return self.__str__()
+
+
+class HasInstructions(HasChildren):
+    """Mixin for objects that have instructions, currently: Shot (which can
+    have wait instructions) and Output (which can have all other
+    instructions)."""
+    allowed_instructions = [Instruction]
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.instructions = []
+
+    def add_instruction(self, instruction):
+        if not any(isinstance(instruction, cls) for cls in self.allowed_instructions):
+            msg = f"Instruction of type {device.__class__.__name__} not permitted by {self}"
+            raise TypeError(msg)
+        self.instructions.append(instruction)
+
+    def descendant_instructions(self, recurse_into_pseudoclocks=False):
+        # When a subclass inherits from both HasInstructions and HasDevices,
+        # this method ensures the instances own instructions are returned as well
+        # as those of child devices
+        instructions = super().descendant_instructions(recurse_into_pseudoclocks)
+        instructions.extend(self.instructions)
+        return instructions
 
     def __repr__(self):
         return self.__str__()
