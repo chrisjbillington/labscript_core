@@ -15,24 +15,16 @@ class HasParent(object, metaclass=has_phase_enforced_methods):
     def __init__(self, parent):
         self.parent = parent
         if parent is self:
+            from shot import Shot
+            if not isinstance(self, Shot):
+                msg = "Only a Shot can be its own parent"
+                raise TypeError(msg)
             self.shot = self
-            self.phase = None
         else:
             self.shot = parent.shot
 
         # Add self to the phase enforcer's registry of all instances:
         enforce_phase.register_instance(self)
-
-    def set_compilation_phase(self, phase):
-        from shot import Shot
-        if not isinstance(self, Shot):
-            msg = "Only an instance of Shot can set the compilation phase"
-            raise RuntimeError(msg)
-        if self.phase is not None:
-            # Check if all required methods were called of the phase that is over:
-            enforce_phase.check_required_methods_called(self.shot, self.phase)
-        # Set the new phase
-        self.phase = phase
 
 
 class Instruction(HasParent):
