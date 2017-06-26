@@ -1,6 +1,6 @@
 import weakref
 from enum import IntEnum
-from functools import wraps
+import functools
 from types import MethodType
 
 # Determines whether the enforce_phase decorator has any effect. Useful to set
@@ -59,20 +59,28 @@ class has_phase_enforced_methods(type):
 
 
 class PhaseEnforcedFunction(object):
+    """A callable that wraps a function to enforce that it is only called in
+    the given phase, and only once if required"""
     def __init__(self, function, phase, exactly_once):
         self.function = function
         self.phase = phase
         self.exactly_once = exactly_once
+        functools.update_wrapper(self, function)
 
     def __get__(self, instance, class_):
-        """Make sure our callable binds like an instance method """
-        return MethodType(self, instance)
+        """Make sure our callable binds like an instance method. Otherwise
+        __call__ doesn't get the instance argument."""
+        if instance is None:
+            return self
+        else:
+            return MethodType(self, instance)
 
     def __call__(self, instance, *args, **kwargs):
         """Call the underlying function, wrapped in our check that it's the
         right phase. Call the function first so that __init__ methods are
-        complete and attributes we are interested in exist by the time we do
-        our checks"""
+        complete so that the .shot attribute exists by the time we do our
+        checks, and to make it more likely that any problems result in an
+        exception from the wrapped function rather than from us."""
         result = self.function(instance, *args, **kwargs)
         shot = instance.shot
         if shot.phase != self.phase:
