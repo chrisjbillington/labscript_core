@@ -30,7 +30,7 @@ class Shot(HasDevices, HasInstructions):
         self.phase = None
 
         # The phase of compilation we are up to:
-        self.set_phase(phase.ADD_DEVICES)
+        self._set_phase(phase.ADD_DEVICES)
 
     def add_device(self, device):
         if isinstance(device, PseudoclockDevice):
@@ -41,7 +41,7 @@ class Shot(HasDevices, HasInstructions):
             self.master_pseudoclock = device
         super().add_device(device)
 
-    def set_phase(self, phase):
+    def _set_phase(self, phase):
         if self.phase is not None:
             # Check that all required methods were called in the previous phase:
             enforce_phase.check_required_methods_called(self.shot, self.phase)
@@ -54,15 +54,15 @@ class Shot(HasDevices, HasInstructions):
         self.all_pseudoclocks = [d for d in self.all_devices if isinstance(d, Pseudoclock)]
 
         # Have devices compute the limitations common to their children
-        self.set_phase(phase.ESTABLISH_COMMON_LIMITS)
+        self._set_phase(phase.ESTABLISH_COMMON_LIMITS)
         self.establish_common_limits()
 
         # Have devices inherit the information they need from their parents, 
         # including those common limits they are interested in.
-        self.set_phase(phase.ESTABLISH_INITIAL_ATTRIBUTES)
+        self._set_phase(phase.ESTABLISH_INITIAL_ATTRIBUTES)
         self.establish_initial_attributes()
 
-        self.set_phase(phase.ADD_INSTRUCTIONS)
+        self._set_phase(phase.ADD_INSTRUCTIONS)
         # TODO: trigger pseudoclocks.
         # TODO: Enum/dummy for trigger start time? - EARLIEST LATEST etc? arithmetic? - t0, t0 + etc. 
         # TODO: return max delay? Maybe only max delay of pseudoclocks that didn't have
@@ -85,11 +85,11 @@ class Shot(HasDevices, HasInstructions):
         # convert_timing() calls?
         sort_by_time(self.instructions)
 
-        self.set_phase(phase.CONVERT_TIMING)
+        self._set_phase(phase.CONVERT_TIMING)
         # TODO tell all instructions to convert their timing
         self.convert_timing(self.instructions)
 
-        self.set_phase(phase.CHECK_INSTRUCTIONS_VALID)
+        self._set_phase(phase.CHECK_INSTRUCTIONS_VALID)
         # Todo call the recursive methods that check validity of instructions at each level
 
         

@@ -1,6 +1,7 @@
 import weakref
 from enum import IntEnum
 from functools import wraps
+from types import MethodType
 
 # Determines whether the enforce_phase decorator has any effect. Useful to set
 # to False when not debugging or developing, to ensure there is no adverse
@@ -20,6 +21,7 @@ class AlreadyCalledError(PhaseError):
 
 class NotCalledError(PhaseError):
     pass
+
 
 class phase(IntEnum):
     """Enum for what 'phase' of compilation we are up to, to enforce that
@@ -50,10 +52,41 @@ class has_phase_enforced_methods(type):
         # @enforce_phase and marked as methods that must be called exactly
         # once in their phase:
         for name, attr in cls.__dict__.items():
-            if getattr(attr, 'is_phase_enforced_method', False) and attr.exactly_once:
+            if isinstance(attr, PhaseEnforcedFunction) and attr.exactly_once:
                 # Add the decorated method to the  registry of decorated
                 # methods that are required to be called exactly once
                 enforce_phase.register_required_method(cls, attr)
+
+
+class PhaseEnforcedFunction(object):
+    def __init__(self, function, phase, exactly_once):
+        self.function = function
+        self.phase = phase
+        self.exactly_once = exactly_once
+
+    def __get__(self, instance, class_):
+        """Make sure our callable binds like an instance method """
+        return MethodType(self, instance)
+
+    def __call__(self, instance, *args, **kwargs):
+        """Call the underlying function, wrapped in our check that it's the
+        right phase. Call the function first so that __init__ methods are
+        complete and attributes we are interested in exist by the time we do
+        our checks"""
+        result = self.function(instance, *args, **kwargs)
+        shot = instance.shot
+        if shot.phase != self.phase:
+            msg = (f"{instance.__class__.__name__}.{self.function.__name__}() "
+                   f"cannot be called in phase {shot.phase.name}")
+            raise WrongPhaseError(msg)
+        if self.exactly_once:
+            called = enforce_phase.called_methods.setdefault(instance, set())
+            if self in called:
+                msg = (f"{instance} has already had {self.function.__name__}() "
+                       f"called once in phase {shot.phase.name}")
+                raise AlreadyCalledError(msg)
+            called.add(self)
+        return result
 
 
 class enforce_phase(object):
@@ -63,8 +96,8 @@ class enforce_phase(object):
 
     # Class attribute to store a list of objects by what shot they belong to,
     # so that we can do checks on all the descendants of a shot when its phase
-    # changes. WeakKeyDictionary so that it vanishes when the shot does. All
-    # subclasses will access this same mutable attribute:
+    # changes. WeakKeyDictionary so we don't prevent garbage collection when
+    # the shot is otherwise finished with.
     instances_by_shot = weakref.WeakKeyDictionary()
 
     # Set of methods of each class that are required to be called exactly once
@@ -73,55 +106,23 @@ class enforce_phase(object):
     required_methods = {}
 
     # Store methods that have been called on a given instance. Format:
-    # {instance: set([methods])}
+    # {instance: set([methods])}. WeakKeyDictionary so we don't prevent
+    # Garbage collection when the instances have no other references to them:
     called_methods = weakref.WeakKeyDictionary()
 
     def __init__(self, phase, exactly_once=False):
+        """Instantiate the decorator with the passed arguments"""
         self.phase = phase
         self.exactly_once = exactly_once
 
-    def __call__(self, method):
+    def __call__(self, function):
+        """Call the decorator on the function. Return the decorated function"""
         if not ENFORCE_PHASE:
-            return method
-        if self.exactly_once and method.__name__ == '__init__':
+            return function
+        if self.exactly_once and function.__name__ == '__init__':
             msg = "No need to set exactly_once=True on an __init__ method"
             raise ValueError(msg)
-
-        @wraps(method)
-        def check_phase(instance, *args, **kwargs):
-            try:
-                shot = instance.shot
-            except AttributeError:
-                # If it's an __init__ method then the parent is one of the
-                # arguments:
-                from bases import Device, Instruction
-                if isinstance(instance, Device):
-                    shot = args[1].shot
-                elif isinstance(instance, Instruction):      
-                    shot = args[0].shot
-                else:
-                    msg = (f"enforce_phase doesn't know "
-                           f"about classes of type {instance.__class__.__name__}")
-                    raise TypeError(msg)
-            if shot.phase != self.phase:
-                msg = (f"{instance.__class__.__name__}.{method.__name__}() "
-                       f"cannot be called in phase {shot.phase.name}")
-                raise WrongPhaseError(msg)
-            if self.exactly_once:
-                called = enforce_phase.called_methods.setdefault(instance, set())
-                if method in called:
-                    msg = (f"{instance} has already had {method.__name__}() "
-                           f"called once in phase {shot.phase.name}")
-                    raise AlreadyCalledError(msg)
-                called.add(method)
-            return method(instance, *args, **kwargs)
-
-        check_phase.is_phase_enforced_method = True
-        check_phase.exactly_once = self.exactly_once
-        check_phase.phase = self.phase
-        check_phase.method = method
-
-        return check_phase
+        return PhaseEnforcedFunction(function, self.phase, self.exactly_once)
 
     @classmethod
     def register_instance(cls, instance):
@@ -131,14 +132,13 @@ class enforce_phase(object):
         descendents_of_shot.add(instance)
 
     @classmethod
-    def register_required_method(cls, meth_cls, phase_enforced_method):
+    def register_required_method(cls, class_, phase_enforced_function):
         """Register that a method of a class can only be called in a
         particular phase, and optionally that it needs to be called exactly
         once in its phase"""
-        method = phase_enforced_method.method
-        phase = phase_enforced_method.phase
-        methods = cls.required_methods.setdefault(phase, {}).setdefault(meth_cls, set())
-        methods.add(method)
+        phase = phase_enforced_function.phase
+        methods = cls.required_methods.setdefault(phase, {}).setdefault(class_, set())
+        methods.add(phase_enforced_function)
 
     @classmethod
     def check_required_methods_called(cls, shot, phase):

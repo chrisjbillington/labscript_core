@@ -115,6 +115,9 @@ class HasDevices(HasChildren):
             msg = (f"Device of type {device.__class__.__name__} "
                    f"not permitted as child of {self}.")
             raise TypeError(msg)
+        if device.parent is not self:
+            msg = "Cannot add device with a different parent"
+            raise ValueError(msg)
         self.devices.append(device)
 
     def descendant_devices(self, recurse_into_pseudoclocks=False):
@@ -199,8 +202,12 @@ class HasInstructions(HasChildren):
     @enforce_phase(phase.ADD_INSTRUCTIONS)
     def add_instruction(self, instruction):
         if not any(isinstance(instruction, cls) for cls in self.allowed_instructions):
-            msg = f"Instruction of type {device.__class__.__name__} not permitted by {self}"
+            msg = (f"Instruction of type {instruction.__class__.__name__} "
+                   f"not permitted by {self}")
             raise TypeError(msg)
+        if instruction.parent is not self:
+            msg = "Cannot add instruction with a different parent"
+            raise ValueError(msg)
         self.instructions.append(instruction)
 
     def descendant_instructions(self, recurse_into_pseudoclocks=False):
