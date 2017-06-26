@@ -29,6 +29,7 @@ class Function(OutputInstruction):
 
 
     def convert_timing(self, waits):
+        super().convert_timing( waits)
         pass
 
     def __str__(self):

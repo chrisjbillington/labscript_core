@@ -1,62 +1,16 @@
 import traceback
 import weakref
-from enum import IntEnum
-from functools import wraps
 
+from enforce_phase import phase, enforce_phase, has_phase_enforced_methods
 from utils import formatobj
 
 
-# Determines whether the enforce_phase decorator has any effect. Useful to set
-# to False when not debugging or developing, to ensure there is no adverse
-# performance hit from checking every method call.
-ENFORCE_PHASE = True
-
-
-# Exception classes for when the phase enforcement detects a problem:
-class PhaseError(RuntimeError):
-    pass
-
-class WrongPhaseError(PhaseError):
-    pass
-
-class AlreadyCalledError(PhaseError):
-    pass
-
-class NotCalledError(PhaseError):
-    pass
-
-
-class phase(IntEnum):
-    """Enum for what 'phase' of compilation we are up to, to enforce certain
-    methods only be called in certain phases"""
-
-    # The following compilation steps happen in this order.
-
-    ADD_DEVICES = 0
-    ESTABLISH_COMMON_LIMITS = 1
-    ESTABLISH_INITIAL_ATTRIBUTES = 2
-    ADD_INSTRUCTIONS = 3
-    CONVERT_TIMING = 4
-    CHECK_INSTRUCTIONS_VALID = 5
-
-
-class HasParent(object):
+class HasParent(object, metaclass=has_phase_enforced_methods):
     """Base class for all objects that have a parent, such as Instructions and
     Devices. For our purposes the Shot class is also an instance of HasParent
-    - its parent is itself. At the moment this class only contains debugging
-    functionality common to all objects in the shot/device/instruction
-    hierarchy."""
-    # Class attribute to store a list of objects by what shot they belong to,
-    # so that we can do checks on all the descendants of a shot when it asks.
-    # WeakKeyDictionary so that it vanishes when the shot does. All subclasses
-    # will access this same mutable attribute:
-    __instances_by_shot = weakref.WeakKeyDictionary()
-
-    # Set of methods of each class that are required to be called exactly once
-    # on each instance in a given phase. Format: {phase: {class: set(method,
-    # other_method, ...)}). All subclasses will access this same mutable
-    # attribute:
-    __methods_required_once_by_phase = {}
+    - its parent is itself. The main purpose of this class presently is to hook
+    into the debugging and testing functionality of the @enforce_phase decorator,
+    which requires some metaclass magic to work correctly."""
 
     def __init__(self, parent):
         self.parent = parent
@@ -66,101 +20,19 @@ class HasParent(object):
         else:
             self.shot = parent.shot
 
-        # Dictionary to store whether methods to be called exactly once have
-        # been called. Format: {phase: set(method, other_method, ...)),}.
-        self._required_methods_called_by_phase = {}
-        descendents_of_shot = self.__instances_by_shot.setdefault(self.shot, [])
-        descendents_of_shot.append(self)
+        # Add self to the phase enforcer's registry of all instances:
+        enforce_phase.register_instance(self)
 
-
-    def set_phase(self, phase):
+    def set_compilation_phase(self, phase):
         from shot import Shot
         if not isinstance(self, Shot):
             msg = "Only an instance of Shot can set the compilation phase"
             raise RuntimeError(msg)
         if self.phase is not None:
-             # Check that methods were called as required in the current phase:
-            for instance in self.__instances_by_shot[self]:
-                instance._check_required_methods_called(self.phase)
+            # Check if all required methods were called of the phase that is over:
+            enforce_phase.check_required_methods_called(self.shot, self.phase)
         # Set the new phase
         self.phase = phase
-
-
-    @classmethod
-    def enforce_phase(cls, phase, exactly_once=False):
-        """Decorate an instance method to enforce that it only be called in a
-        particular phase of the compilation process, and if required, that it
-        be called exactly once during that phase """
-
-        def decorator(method):
-            if not ENFORCE_PHASE:
-                return method
-            if exactly_once and method.__name__ == '__init__':
-                msg = "No need to set exactly_once=True on an __init__ method"
-                raise ValueError(msg)
-            elif exactly_once:
-                # Mark the method as needing to be called exactly once in each
-                # phase:
-                methods_this_phase = cls.__methods_required_once_by_phase.setdefault(phase, {})
-                methods_this_class = methods_this_phase.setdefault(cls, set())
-                methods_this_class.add(method)
-
-            @wraps(method)
-            def check_phase(self, *args, **kwargs):
-                try:
-                    shot = self.shot
-                except AttributeError:
-                    # If it's an __init__ method then the parent is one of the
-                    # arguments:
-                    from bases import Device, Instruction
-                    if isinstance(self, Device):
-                        shot = args[1].shot
-                    elif isinstance(self, Instruction):      
-                        shot = args[0].shot
-                    else:
-                        msg = (f"enforce_phase doesn't know "
-                               f"about classes of type {self.__class__.__name__}")
-                        raise TypeError()
-                if shot.phase != phase:
-                    msg = (f"{self.__class__.__name__}.{method.__name__}() "
-                           f"cannot be called in phase {shot.phase.name}")
-                    raise WrongPhaseError(msg)
-                if exactly_once:
-                    called = self._required_methods_called_by_phase.setdefault(phase, set())
-                    if method in called:
-                        msg = (f"{self} has already had {method.__name__}() "
-                               f"called once in phase {shot.phase.name}")
-                        raise AlreadyCalledError(msg)
-                    self._required_methods_called_by_phase[phase].add(method)
-                return method(self, *args, **kwargs)
-
-            return check_phase
-
-        return decorator
-
-
-    def _check_required_methods_called(self, phase):
-        """Confirm that at the end of given phase, all methods that were
-        marked as needing to be called exactly once were called"""
-        called_methods = self._required_methods_called_by_phase.setdefault(phase, set())
-        required_this_phase = self.__methods_required_once_by_phase.setdefault(phase, {})
-        for cls, required_methods in required_this_phase.items():
-            if isinstance(self, cls) and (required_methods - called_methods):
-                for method in (required_methods - called_methods):
-                    # Just raise an exception about one of them:
-                    msg = (f"{self.__class__.__name__}.{method.__name__}() "
-                           f"not called by end of phase {phase.name}")
-                    raise NotCalledError(msg)
-
-        #TODO:
-        # When decorated, if exactly_once is True, add to instance attribute 
-        # saying whether it's been called or not. Make the decorator check
-        # this attribute upon calling to confirm it hasn't been called before,
-        # and make _phase_end_checks confirm it was called once.
-
-
-# Pop the decorator out to the top level for importing by others:
-enforce_phase = HasParent.enforce_phase
 
 
 class Instruction(HasParent):
@@ -261,7 +133,7 @@ class HasDevices(HasChildren):
         from devices import Pseudoclock
         devices = []
         for device in self.devices:
-            if isinstance(device, Pseudoclock) or not recurse_into_pseudoclocks:
+            if isinstance(device, Pseudoclock) and not recurse_into_pseudoclocks:
                 continue
             else:
                 devices.append(device)
@@ -278,7 +150,7 @@ class HasDevices(HasChildren):
         from devices import Pseudoclock
         instructions = super().descendant_instructions(recurse_into_pseudoclocks)
         for device in self.devices:
-            if isinstance(device, Pseudoclock) or not recurse_into_pseudoclocks:
+            if isinstance(device, Pseudoclock) and not recurse_into_pseudoclocks:
                 continue
             else:
                 instructions.extend(device.descendant_instructions(recurse_into_pseudoclocks))

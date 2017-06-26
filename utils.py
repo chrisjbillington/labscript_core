@@ -32,13 +32,19 @@ def _const(c):
 
 def formatobj(obj, *attrs):
     """Format an object and some arguments for printing"""
-    from bases import Device
-    from shot import Shot
-    result = obj.__class__.__name__ + "("
-    for attr in attrs:
-        value = getattr(obj, attr)
-        if isinstance(value, Device) or isinstance(value, Shot):
-            value = value.name
-        result += f"{attr}={value}, "
-    result = result[:-2] + ')'
-    return result
+    try:
+        from bases import Device
+        from shot import Shot
+        result = obj.__class__.__name__ + "("
+        for attr in attrs:
+            value = getattr(obj, attr)
+            if isinstance(value, Device) or isinstance(value, Shot):
+                value = value.name
+            result += f"{attr}={value}, "
+        result = result[:-2] + ')'
+        return result
+    except Exception:
+        # Sometimes you're trying to debug by printing things before they've
+        # finished being instantiated. In that case, return something rather
+        # than crashing:
+        return object.__str__(obj)

@@ -11,6 +11,8 @@ from shot import Shot
 
 
 if __name__ == '__main__':
+    import time
+    start_time = time.time()
     shot = Shot('<shot>', 100e-9)
     pulseblaster = PseudoclockDevice('pulseblaster', shot, None, minimum_trigger_duration=0.1)
     pulseblaster_clock = Pseudoclock('pulseblaster_clock', pulseblaster, 'clock',
@@ -23,7 +25,10 @@ if __name__ == '__main__':
     ao.constant(t=0, value=7)
     ao.function(t=0, duration=7, function=np.sin, samplerate=20)
 
+    shot.stop(1)
 
+    print(time.time() - start_time)
+    
 # TODO list:
 # Implement pseudoclock.establish_common_limitations:
 #   Pseudoclocks need to:
