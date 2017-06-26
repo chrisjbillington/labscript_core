@@ -13,8 +13,8 @@ class Shot(HasDevices, HasInstructions):
     allowed_instructions = [Wait]
     allowed_devices = [PseudoclockDevice, StaticDevice]
 
-    def __init__(self, name, epsilon, *args, **kwargs):
-        super().__init__(self)
+    def __init__(self, name, epsilon, **kwargs):
+        super().__init__(self, **kwargs)
         self.epsilon = epsilon
         self.name = name
         self.master_pseudoclock = None

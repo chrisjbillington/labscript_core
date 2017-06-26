@@ -44,7 +44,7 @@ def formatobj(obj, *attrs):
         result = result[:-2] + ')'
         return result
     except Exception:
-        # Sometimes you're trying to debug by printing things before they've
+        # Sometimes you're trying to debug and printing things before they've
         # finished being instantiated. In that case, return something rather
         # than crashing:
         return object.__str__(obj)

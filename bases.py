@@ -13,7 +13,11 @@ class HasParent(object, metaclass=has_phase_enforced_methods):
     @enforce_phase decorator, which requires some metaclass magic to work
     correctly."""
 
-    def __init__(self, parent):
+    def __init__(self, parent, **kwargs):
+        if kwargs:
+            msg = f"Keywords not used by any derived classes: {list(kwargs.keys())}"
+            raise ValueError(msg)
+        super().__init__(**kwargs)
         self.parent = parent
         if parent is self:
             from shot import Shot
@@ -30,7 +34,7 @@ class HasParent(object, metaclass=has_phase_enforced_methods):
 
 class Instruction(HasParent):
     @enforce_phase(phase.ADD_INSTRUCTIONS)
-    def __init__(self, parent, t, *args, _inst_depth=1, **kwargs):
+    def __init__(self, parent, t, _inst_depth=1, **kwargs):
         """Base instruction class. Has an initial time, and that's about it.
         _inst_depth is the stack depth of functions that are wrappers around
         instantiating Instructions. All such functions (including the __init__
@@ -43,7 +47,7 @@ class Instruction(HasParent):
         of user code that resulted in creating the instruction (internal
         labscript tracebacks, unless labscript itself has crashed, are not
         useful)."""
-        super().__init__(parent)
+        super().__init__(parent, **kwargs)
         self.t = t
         self.parent.add_instruction(self)
         self.pseudoclock = parent.pseudoclock
@@ -99,8 +103,8 @@ class HasDevices(HasChildren):
     # should override this class attribute to specify which devices are
     # allowed as children.
     allowed_devices = []
-    def __init__(self, parent):
-        super().__init__(parent)
+    def __init__(self, parent, **kwargs):
+        super().__init__(parent, **kwargs)
         self.devices = []
 
         # Used to enforce that the two methods establish_common_limits() and
@@ -195,8 +199,8 @@ class HasInstructions(HasChildren):
     have wait instructions) and Output (which can have all other
     instructions)."""
     allowed_instructions = [Instruction]
-    def __init__(self, parent):
-        super().__init__(parent)
+    def __init__(self, parent, **kwargs):
+        super().__init__(parent, **kwargs)
         self.instructions = []
 
     @enforce_phase(phase.ADD_INSTRUCTIONS)
@@ -230,8 +234,8 @@ class Device(HasDevices):
     allowed_devices = []
     output_delay = 0
     @enforce_phase(phase.ADD_DEVICES)
-    def __init__(self, name, parent, connection):
-        super().__init__(parent)
+    def __init__(self, name, parent, connection, **kwargs):
+        super().__init__(parent, **kwargs)
         self.name = name
         self.connection = connection
         self.parent.add_device(self)
@@ -258,8 +262,8 @@ Device.allowed_devices = [Device]
 class Output(Device, HasInstructions):
     allowed_instructions = [OutputInstruction]
     allowed_devices = [Device]
-    def __init__(self, name, parent, connection):
-        super().__init__(name, parent, connection)  
+    def __init__(self, name, parent, connection, **kwargs):
+        super().__init__(name, parent, connection, **kwargs)  
 
     # TODO: put these in non-core so that this Output class can be a base
     # class for static outputs too. Or add a DynamicOutput class that these
