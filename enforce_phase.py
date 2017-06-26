@@ -5,7 +5,7 @@ from functools import wraps
 # Determines whether the enforce_phase decorator has any effect. Useful to set
 # to False when not debugging or developing, to ensure there is no adverse
 # performance hit from checking every method call.
-ENFORCE_PHASE = False
+ENFORCE_PHASE = True
 
 
 # Exception classes for when the phase enforcement detects a problem:
