@@ -15,41 +15,6 @@ sys.path.insert(0, parent_dir)
 
 import core
 
-
-
-
-# class RaiseExceptionInThreadTest(unittest.TestCase):
-
-#     def setUp(self):
-#         # Mock threading.Thread to just run a function in the main thread:
-#         class MockThread(object):
-#             used = False
-#             def __init__(self, target, args):
-#                 self.target = target
-#                 self.args = args
-#             def start(self):
-#                 MockThread.used = True
-#                 self.target(*self.args)
-#         self.mock_thread = MockThread
-#         self.orig_thread = threading.Thread
-#         threading.Thread = MockThread
-
-#     def test_can_raise_exception_in_thread(self):
-#         class TestError(Exception):
-#             pass
-#         try:
-#             raise TestError('test')
-#         except Exception:
-#             exc_info = sys.exc_info()
-#             with self.assertRaises(TestError):
-#                 raise_exception_in_thread(exc_info)
-#             self.assertTrue(self.mock_thread.used)
-
-#     def tearDown(self):
-#         # Restore threading.Thread to what it should be
-#         threading.Thread = self.orig_thread
-
-
 class  ReprTest(unittest.TestCase):
     """test the string representation of objects"""
 

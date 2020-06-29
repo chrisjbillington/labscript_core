@@ -1,5 +1,4 @@
 import traceback
-import weakref
 
 from enforce_phase import phase, enforce_phase, has_phase_enforced_methods
 from utils import formatobj
@@ -106,12 +105,6 @@ class HasDevices(HasChildren):
     def __init__(self, parent, **kwargs):
         super().__init__(parent, **kwargs)
         self.devices = []
-
-        # Used to enforce that the two methods establish_common_limits() and
-        # establish_initial_attributes() are called exactly once during
-        # compilation:
-        self.common_limits_established = False
-        self.initial_attributes_established = False
 
     @enforce_phase(phase.ADD_DEVICES)
     def add_device(self, device):

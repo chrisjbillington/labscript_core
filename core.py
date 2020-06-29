@@ -14,7 +14,7 @@ if __name__ == '__main__':
     import time
     start_time = time.time()
     shot = Shot('<shot>', 100e-9)
-    pulseblaster = PseudoclockDevice('pulseblaster', shot, None, trigger_minimum_duration=0.1)
+    pulseblaster = PseudoclockDevice('pulseblaster', shot, None, minimum_trigger=0.1)
     pulseblaster_clock = Pseudoclock('pulseblaster_clock', pulseblaster, 'clock',
                                      clock_minimum_period=1, wait_delay=0.5, timebase=0.1)
     clockline = ClockLine('clockline', pulseblaster_clock, 'flag 1')
@@ -41,10 +41,10 @@ if __name__ == '__main__':
 #   latency:                            float or dict-->float by connection, or dict-->float by instruction class, giving this device's contribution to latency to that child
 #   get_latency:                        method returning the above for a given child device or instruction, or with no args if latency is a float
 #   ancestor_latency:                   float. latency including all parents up to the master pseudoclock (not including own latency)
-#   trigger_minimum_duration:           float. minimum trigger required by TriggerableDevice
+#   minimum_trigger:                    float. minimum trigger required by TriggerableDevice
 #   clock_minimum_trigger               float: minimum trigger required by ClockableDevice
-#   common_trigger_minimum_duration:    float: min trigger duration that satisfies all devices under this pseudoclock (rounded up to timebase)
-#   common_clock_minimum_trigger               float: minimum trigger required by ClockableDevice
+#   common_minimum_trigger:             float: min trigger duration that satisfies all devices under this pseudoclock (rounded up to timebase)
+#   common_clock_minimum_trigger        float: minimum trigger required by ClockableDevice
 #   wait_delay:                         float: how long a pseudoclock waits at minimum
 #   nominal_wait_delay:                 float: property of shot: the wait delay that satisfies all devices
 #   prewait_overtime                    float: how long a device can still issue instructions after a call to wait() before the wait occurs for it.

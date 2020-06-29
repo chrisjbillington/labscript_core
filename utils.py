@@ -1,4 +1,5 @@
 from operator import attrgetter
+import numpy as np
 
 def sort_by_time(instructions):
     instructions.sort(key=attrgetter('t'))

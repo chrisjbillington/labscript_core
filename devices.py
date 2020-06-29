@@ -15,12 +15,12 @@ class StaticOutput(Output):
 
 class TriggerableDevice(Device):
     def __init__(self, name, parent, connection,
-                 trigger_minimum_duration, **kwargs):
+                 minimum_trigger, **kwargs):
         super().__init__(name, parent, connection, **kwargs)
 
         # The minimum high/low time of a pulse sufficient to trigger the
         # device
-        self.trigger_minimum_duration = trigger_minimum_duration
+        self.minimum_trigger = minimum_trigger
 
 
 class Trigger(Output):
